@@ -1,13 +1,16 @@
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, declarative_base
 
-DATABASE_URL = "postgresql://myuser:mypassword@localhost:5432/graphlm"
+DATABASE_URL = "postgresql+psycopg2://myuser:mypassword@localhost:5432/mydb"
 
-engine = create_engine(DATABASE_URL)
+engine = create_engine(DATABASE_URL, echo=True)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
 
-def check_db_connection():
+
+def get_db():
+    db = SessionLocal()
     try:
-        with engine.connect() as connection:
-            connection.execute(text("SELECT 1"))
-        return {"database_status": "Connected to postgres"}
-    except Exception as e:
-        return {"database_status": "Not connected", "error": str(e)}
+        yield db
+    finally:
+        db.close()
