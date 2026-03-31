@@ -1,6 +1,6 @@
 from fastapi import APIRouter
-from services.health_service import get_health
-from db.database import check_db_connection
+from app.services.health_service import get_health
+from app.db.database import check_db_connection
 
 router = APIRouter(prefix="/health", tags=["Health", "Status"])
 

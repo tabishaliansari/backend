@@ -1,14 +1,22 @@
 from fastapi import FastAPI
 
-from db.database import Base, engine
-from db import base
-from api.routes.auth_controller import router as auth_router
+from app.db.database import Base, engine
+from app.db import base
+from app.api.routes.auth import router as auth
+from app.api.limiter import limiter
+from app.api.limiter import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 app = FastAPI(title="FastAPI Auth")
 
-Base.metadata.create_all(bind=engine)
+# Base.metadata.create_all(bind=engine)
 
-app.include_router(auth_router)
+app.include_router(auth)
+
+
+app.state.limiter = limiter
+
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 
 @app.get("/")

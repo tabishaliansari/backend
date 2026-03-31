@@ -1,9 +1,9 @@
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 
-from models.user import User
-from schemas.user import UserRegister, UserLogin
-from core.security import hash_password, verify_password, create_access_token
+from app.models.user import User
+from app.schemas.user import UserRegister, UserLogin
+from app.core.security import hash_password, verify_password, create_access_token
 
 
 def get_user_by_username(db: Session, username: str):
