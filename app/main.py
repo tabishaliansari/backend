@@ -4,9 +4,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.db.database import Base, engine
 from app.db import base
 from app.api.routes.auth import router as auth
+from app.api.routes.health import router as health
 from app.api.limiter import limiter
-from app.api.limiter import _rate_limit_exceeded_handler
-from slowapi.errors import RateLimitExceeded
+from app.utils.api_error import register_exception_handlers
 
 app = FastAPI(title="FastAPI Auth")
 
@@ -21,11 +21,12 @@ app.add_middleware(
 # Base.metadata.create_all(bind=engine)
 
 app.include_router(auth)
-
+app.include_router(health)
 
 app.state.limiter = limiter
 
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+# Register exception handlers
+register_exception_handlers(app)
 
 
 @app.get("/")

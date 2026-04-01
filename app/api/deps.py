@@ -1,0 +1,140 @@
+"""
+FastAPI dependencies for shared request logic.
+
+Provides reusable dependency functions for routes including authentication
+and authorization. Dependencies inject required data into route handlers.
+
+This module replaces Express middleware patterns with FastAPI's dependency
+injection system.
+"""
+
+from fastapi import Depends, Request
+from sqlalchemy.orm import Session
+
+from app.db.database import get_db
+from app.core.security import decode_token
+from app.repositories.user_repo import get_user_by_id
+from app.models.user import User
+from app.utils.api_error import ApiError
+from app.core.error_codes import ErrorCodes
+
+
+def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
+    """
+    FastAPI dependency to get the currently authenticated user.
+
+    Replicates Express middleware behavior of "isLoggedIn" - validates the
+    JWT token from cookies and returns the authenticated user object.
+
+    Flow:
+    1. Extract `accessToken` from cookies
+    2. Validate token exists
+    3. Decode JWT token
+    4. Validate token is valid (not expired, valid signature)
+    5. Extract user ID from token payload ("sub" claim)
+    6. Fetch user from database
+    7. Validate user exists
+    8. Return authenticated user
+
+    Args:
+        request: FastAPI Request object
+        db: Database session (FastAPI injected via Depends)
+
+    Returns:
+        User object of authenticated user
+
+    Raises:
+        ApiError(401): If token missing, invalid, expired, or user not found
+
+    Usage in routes:
+        @router.get("/profile")
+        def get_profile(current_user: User = Depends(get_current_user)):
+            return {"username": current_user.username}
+    """
+    # Step 1: Extract token from cookies
+    token = request.cookies.get("accessToken")
+
+    # Step 2: Validate token exists
+    if not token:
+        raise ApiError(
+            statusCode=401,
+            message="Access token missing. Please log in.",
+            code=ErrorCodes.USER_NOT_LOGGED_IN,
+        )
+
+    # Step 3: Decode and validate token
+    payload = decode_token(token)
+
+    # Step 4: Validate token is valid (returns None if invalid/expired)
+    if payload is None:
+        raise ApiError(
+            statusCode=401,
+            message="Invalid or expired access token",
+            code=ErrorCodes.INVALID_ACCESS_TOKEN,
+        )
+
+    # Step 5: Extract user ID from token payload
+    user_id_str = payload.get("sub")
+
+    if not user_id_str:
+        raise ApiError(
+            statusCode=401,
+            message="Invalid token payload",
+            code=ErrorCodes.INVALID_ACCESS_TOKEN,
+        )
+
+    # Convert user_id to int (stored as string in JWT)
+    try:
+        user_id = int(user_id_str)
+    except (ValueError, TypeError):
+        raise ApiError(
+            statusCode=401,
+            message="Invalid token payload",
+            code=ErrorCodes.INVALID_ACCESS_TOKEN,
+        )
+
+    # Step 6: Fetch user from database
+    user = get_user_by_id(db, user_id)
+
+    # Step 7: Validate user exists
+    if not user:
+        raise ApiError(
+            statusCode=401,
+            message="User not found",
+            code=ErrorCodes.INVALID_ACCESS_TOKEN,
+        )
+
+    # Step 8: Return authenticated user
+    return user
+
+
+def get_current_admin(current_user: User = Depends(get_current_user)) -> User:
+    """
+    FastAPI dependency to get the currently authenticated admin user.
+
+    Validates that the authenticated user has admin role.
+
+    Args:
+        current_user: Authenticated user (FastAPI injected via Depends)
+
+    Returns:
+        User object if user is admin
+
+    Raises:
+        ApiError(403): If user is not an admin
+
+    Usage in routes:
+        @router.delete("/users/{user_id}")
+        def delete_user(user_id: int, admin: User = Depends(get_current_admin)):
+            # Only admins can call this
+            return {"message": "User deleted"}
+    """
+    if current_user.role != "admin":
+        raise ApiError(
+            statusCode=403,
+            message="Admin access required",
+            code=ErrorCodes.UNAUTHORIZED_ACCESS,
+        )
+
+    return current_user
+
