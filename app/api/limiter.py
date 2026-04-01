@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 from app.utils.api_error import ApiError
 from app.core.error_codes import ErrorCodes
 from app.utils import should_include_stack_trace
-from app.schemas.response import Response
+from app.schemas.response import ApiResponse
 
 limiter = Limiter(key_func=get_remote_address)
 
@@ -25,7 +25,7 @@ async def _rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded)
         code=ErrorCodes.TOO_MANY_REQUESTS,
     )
 
-    response = Response(
+    response = ApiResponse(
         statusCode=error.statusCode,
         success=error.success,
         message=error.message,

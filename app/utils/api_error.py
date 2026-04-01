@@ -16,7 +16,7 @@ from slowapi.errors import RateLimitExceeded
 
 from app.core.error_codes import ErrorCodes
 from app.utils.error_utils import should_include_stack_trace, serialize_error_response, format_validation_errors
-from app.schemas.response import Response
+from app.schemas.response import ApiResponse
 from app.api.limiter import _rate_limit_exceeded_handler
 
 
@@ -115,7 +115,7 @@ async def api_error_handler(request: Request, exc: ApiError) -> JSONResponse:
     include_stack = should_include_stack_trace()
     error_data = serialize_error_response(exc, include_stack=include_stack)
 
-    response = Response(
+    response = ApiResponse(
         statusCode=exc.statusCode,
         success=exc.success,
         message=exc.message,
@@ -150,7 +150,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     include_stack = should_include_stack_trace()
     error_data = serialize_error_response(error, include_stack=include_stack)
 
-    response = Response(
+    response = ApiResponse(
         statusCode=error.statusCode,
         success=error.success,
         message=error.message,
@@ -181,7 +181,7 @@ async def general_exception_handler(request: Request, exc: Exception) -> JSONRes
     include_stack = should_include_stack_trace()
     error_data = serialize_error_response(error, include_stack=include_stack)
 
-    response = Response(
+    response = ApiResponse(
         statusCode=error.statusCode,
         success=error.success,
         message=error.message,

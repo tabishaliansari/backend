@@ -15,7 +15,6 @@ from app.core.config import settings
 
 # JWT Configuration
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
 # Password hashing configuration
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -52,11 +51,13 @@ def create_access_token(
     data: Dict[str, Any], expires_delta: Optional[timedelta] = None
 ) -> str:
     """
-    Create a signed JWT access token.
+    Create a signed JWT access token for API authentication.
+
+    Short-lived token (default 15 minutes) used for authenticating API requests.
 
     Args:
         data: Dictionary containing token claims (typically includes "sub" for user id)
-        expires_delta: Optional custom expiration time. If not provided, uses default (60 minutes)
+        expires_delta: Optional custom expiration time. If not provided, uses default
 
     Returns:
         Encoded JWT token string
@@ -66,15 +67,15 @@ def create_access_token(
     """
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + (
-        expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     )
     to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=ALGORITHM)
+    return jwt.encode(to_encode, settings.ACCESS_TOKEN_SECRET, algorithm=ALGORITHM)
 
 
 def decode_token(token: str) -> Optional[Dict[str, Any]]:
     """
-    Decode and validate a JWT token.
+    Decode and validate a JWT access token.
 
     Verifies the token signature and expiration. Returns None if token is invalid
     or expired instead of raising an exception, making it safe for use in FastAPI
@@ -94,7 +95,62 @@ def decode_token(token: str) -> Optional[Dict[str, Any]]:
         user_id = payload.get("sub")
     """
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, settings.ACCESS_TOKEN_SECRET, algorithms=[ALGORITHM])
+        return payload
+    except JWTError:
+        return None
+
+
+def create_refresh_token(
+    data: Dict[str, Any], expires_delta: Optional[timedelta] = None
+) -> str:
+    """
+    Create a signed JWT refresh token for obtaining new access tokens.
+
+    Long-lived token (default 7 days) used to obtain new access tokens without
+    requiring re-authentication. Should be stored in database and included in cookies.
+
+    Args:
+        data: Dictionary containing token claims (typically includes "sub" for user id)
+        expires_delta: Optional custom expiration time. If not provided, uses default
+
+    Returns:
+        Encoded JWT token string
+
+    Example:
+        token = create_refresh_token({"sub": "user_id", "email": "user@example.com"})
+    """
+    to_encode = data.copy()
+    expire = datetime.now(timezone.utc) + (
+        expires_delta or timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+    )
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, settings.REFRESH_TOKEN_SECRET, algorithm=ALGORITHM)
+
+
+def decode_refresh_token(token: str) -> Optional[Dict[str, Any]]:
+    """
+    Decode and validate a JWT refresh token.
+
+    Verifies the token signature and expiration using the refresh token secret.
+    Returns None if token is invalid or expired instead of raising an exception,
+    making it safe for use in FastAPI dependencies.
+
+    Args:
+        token: The refresh JWT token string to decode
+
+    Returns:
+        Dictionary containing token payload if valid, None if invalid or expired
+
+    Example:
+        payload = decode_refresh_token(token)
+        if payload is None:
+            # Token is invalid or expired
+            raise ApiError(401, "Invalid or expired refresh token")
+        user_id = payload.get("sub")
+    """
+    try:
+        payload = jwt.decode(token, settings.REFRESH_TOKEN_SECRET, algorithms=[ALGORITHM])
         return payload
     except JWTError:
         return None

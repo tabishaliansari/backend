@@ -2,7 +2,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from typing import Any, Optional, List
 
 
-class Response(BaseModel):
+class ApiResponse(BaseModel):
     """
     Standard API response wrapper for FastAPI endpoints.
 
@@ -14,10 +14,10 @@ class Response(BaseModel):
     and optional stack trace (development only).
 
     Example (Success):
-        Response(statusCode=200, success=True, message="Success", data={"id": 1})
+        ApiResponse(statusCode=200, success=True, message="Success", data={"id": 1})
 
     Example (Error):
-        Response(
+        ApiResponse(
             statusCode=400,
             success=False,
             message="Username already exists",
@@ -58,3 +58,4 @@ class Response(BaseModel):
         },
         exclude_none=True  # Omit None fields from JSON output
     )
+

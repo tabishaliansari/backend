@@ -8,6 +8,7 @@ This module replaces Express middleware patterns with FastAPI's dependency
 injection system.
 """
 
+from uuid import UUID
 from fastapi import Depends, Request
 from sqlalchemy.orm import Session
 
@@ -83,10 +84,10 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
             code=ErrorCodes.INVALID_ACCESS_TOKEN,
         )
 
-    # Convert user_id to int (stored as string in JWT)
+    # Convert user_id string to UUID (stored as string in JWT)
     try:
-        user_id = int(user_id_str)
-    except (ValueError, TypeError):
+        user_id = UUID(user_id_str)
+    except (ValueError, TypeError, AttributeError):
         raise ApiError(
             statusCode=401,
             message="Invalid token payload",

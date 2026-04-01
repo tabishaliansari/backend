@@ -4,8 +4,13 @@ class Settings(BaseSettings):
     # Database Configuration
     DATABASE_URL: str
 
-    # JWT Configuration
-    SECRET_KEY: str
+    # JWT Configuration - Access Token
+    ACCESS_TOKEN_SECRET: str
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
+
+    # JWT Configuration - Refresh Token
+    REFRESH_TOKEN_SECRET: str
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
     # Application Configuration
     ENVIRONMENT: str = "development"  # development, testing, production

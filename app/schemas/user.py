@@ -1,5 +1,6 @@
 from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
+from uuid import UUID
 
 
 class UserRegister(BaseModel):
@@ -119,7 +120,7 @@ class UserResponse(BaseModel):
 
     Returned after successful registration, login, or profile fetch.
     """
-    id: int
+    id: UUID
     fullname: str
     username: str
     email: EmailStr
@@ -129,7 +130,7 @@ class UserResponse(BaseModel):
         from_attributes = True
         json_schema_extra = {
             "example": {
-                "id": 1,
+                "id": "550e8400-e29b-41d4-a716-446655440000",
                 "fullname": "John Doe",
                 "username": "johndoe",
                 "email": "john@example.com",
