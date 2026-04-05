@@ -16,6 +16,14 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"  # development, testing, production
     DEBUG: bool = False
 
+    # Email Configuration (SMTP)
+    MAILTRAP_SMTP_HOST: str = "smtp.mailtrap.io"
+    MAILTRAP_SMTP_PORT: int = 2525
+    MAILTRAP_SMTP_USER: str = ""
+    MAILTRAP_SMTP_PASS: str = ""
+    MAILTRAP_SENDEREMAIL: str = "noreply@example.com"
+    MAIL_FROM_NAME: str = "GraphLM Team"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.models.user import User
 from app.schemas.user import UserRegister, UserLogin
-from app.core.security import hash_password, verify_password, create_access_token
+from app.core.security import hash_password, verify_password, create_access_token, create_refresh_token
 from app.utils.api_error import ApiError
 from app.core.error_codes import ErrorCodes
 from app.repositories.user_repo import (
@@ -149,7 +149,6 @@ def login_user(db: Session, login_data: UserLogin) -> tuple[str, str, User]:
 
     # Step 5: Generate refresh token (long-lived)
     # Used to obtain new access tokens without requiring re-authentication
-    from app.core.security import create_refresh_token
     refresh_token = create_refresh_token(
         data={"sub": str(user.id), "email": user.email, "username": user.username}
     )

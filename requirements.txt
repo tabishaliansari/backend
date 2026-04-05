@@ -2,6 +2,8 @@ alembic
 bcrypt
 email-validator
 fastapi
+fastapi-mail
+jinja2
 passlib
 psycopg2-binary
 pydantic
