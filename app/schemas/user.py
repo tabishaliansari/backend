@@ -1,28 +1,157 @@
 from pydantic import BaseModel, EmailStr, Field
+from typing import Optional
+from uuid import UUID
 
 
 class UserRegister(BaseModel):
-    name: str = Field(..., min_length=1, max_length=100)
-    username: str = Field(..., min_length=3, max_length=50)
-    email: EmailStr
-    password: str = Field(..., min_length=6, max_length=100)
+    """
+    User registration request validation.
+
+    Validates: fullname, email, username, password with constraints.
+    """
+    fullname: str = Field(
+        ...,
+        min_length=1,
+        max_length=100,
+        description="User's full name (letters, spaces, apostrophes only)"
+    )
+    email: EmailStr = Field(..., description="Valid email address")
+    username: str = Field(
+        ...,
+        min_length=3,
+        max_length=13,
+        pattern=r'^[a-zA-Z0-9_-]+$',
+        description="Username (3-13 chars, alphanumeric with underscore/hyphen)"
+    )
+    password: str = Field(
+        ...,
+        min_length=6,
+        max_length=100,
+        description="Password (minimum 6 characters)"
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "fullname": "John Doe",
+                "email": "john@example.com",
+                "username": "johndoe",
+                "password": "securepass123"
+            }
+        }
 
 
 class UserLogin(BaseModel):
-    username: str
-    password: str
+    """
+    User login request validation.
+
+    Validates: email and password.
+    """
+    email: EmailStr = Field(..., description="User email address")
+    password: str = Field(
+        ...,
+        min_length=6,
+        description="User password (minimum 6 characters)"
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "email": "john@example.com",
+                "password": "securepass123"
+            }
+        }
+
+
+class UserUpdate(BaseModel):
+    """
+    User update request validation.
+
+    Validates: fullname and username for profile updates.
+    """
+    fullname: str = Field(
+        ...,
+        min_length=1,
+        max_length=100,
+        pattern=r"^[a-zA-Z\s.'-]+$",
+        description="User's full name (letters, spaces, hyphens, apostrophes only)"
+    )
+    username: str = Field(
+        ...,
+        min_length=3,
+        max_length=13,
+        pattern=r'^[a-zA-Z0-9]+$',
+        description="Username (3-13 chars, alphanumeric only)"
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "fullname": "Jane Doe",
+                "username": "janedoe"
+            }
+        }
+
+
+class VerifyEmailToken(BaseModel):
+    """
+    Email verification token validation.
+
+    Used for email verification endpoints via URL parameter.
+    """
+    token: str = Field(
+        ...,
+        min_length=40,
+        max_length=80,
+        description="Email verification token (40-80 characters)"
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "token": "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0"
+            }
+        }
 
 
 class UserResponse(BaseModel):
-    id: int
-    name: str
+    """
+    User data response model.
+
+    Returned after successful registration, login, or profile fetch.
+    """
+    id: UUID
+    fullname: str
     username: str
     email: EmailStr
+    role: str
 
     class Config:
         from_attributes = True
+        json_schema_extra = {
+            "example": {
+                "id": "550e8400-e29b-41d4-a716-446655440000",
+                "fullname": "John Doe",
+                "username": "johndoe",
+                "email": "john@example.com",
+                "role": "user"
+            }
+        }
 
 
 class TokenResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
+    """
+    Authentication token response model.
+
+    Returned after successful login with access token.
+    """
+    access_token: str = Field(..., description="JWT access token")
+    token_type: str = Field(default="bearer", description="Token type (always 'bearer')")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                "token_type": "bearer"
+            }
+        }

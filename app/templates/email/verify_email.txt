@@ -1,0 +1,13 @@
+Hi {{ username }},
+
+{{ intro }}
+
+{{ action_instructions }}
+{{ action_button_url }}
+
+{{ outro }}
+
+Yours truly,
+The GraphLM Team
+
+© 2024 GraphLM. All rights reserved.
