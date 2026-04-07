@@ -16,6 +16,8 @@ Future utilities to integrate:
 """
 
 import logging
+from datetime import datetime
+import hashlib
 from sqlalchemy.orm import Session
 
 from app.models.user import User
@@ -216,4 +218,92 @@ def logout_user(db: Session, user: User) -> None:
     # Clear refresh token to revoke all future refresh attempts
     user.refresh_token = None
     db.commit()
+
+
+def verify_email(db: Session, token: str) -> User:
+    """
+    Verify user email address using verification token.
+
+    Validates the email verification token sent via email link and marks
+    the user's email as verified. Clears the token fields after verification.
+
+    Token verification flow (matches Express verifyEmail controller):
+    1. Validate token is not empty
+    2. Hash the token using SHA256
+    3. Query database for user with matching hashed token and non-expired token
+    4. If not found, determine if token is expired or invalid
+    5. Check user email not already verified
+    6. Set is_email_verified = True
+    7. Clear email verification token fields
+    8. Save to database
+    9. Return verified user
+
+    Args:
+        db: Database session
+        token: Unhashed verification token from email link
+
+    Returns:
+        Verified User object with is_email_verified=True and token fields cleared
+
+    Raises:
+        ApiError(400): TOKEN_MISSING if token is empty
+        ApiError(400): TOKEN_INVALID if token hash doesn't match any user
+        ApiError(400): TOKEN_EXPIRED if token exists but has expired
+        ApiError(400): USER_ALREADY_VERIFIED if user email already verified
+    """
+    # Step 1: Validate token exists
+    if not token or token.strip() == "":
+        raise ApiError(
+            statusCode=400,
+            message="Token is missing",
+            code=ErrorCodes.TOKEN_MISSING,
+        )
+
+    # Step 2: Hash the provided token using SHA256 (matches how it was stored)
+    hashed_token = hashlib.sha256(token.encode()).hexdigest()
+
+    # Step 3: Query user with matching non-expired token
+    user = db.query(User).filter(
+        User.email_verification_token == hashed_token,
+        User.email_verification_token_expiry > datetime.utcnow(),
+    ).first()
+
+    # Step 4: If no user found with non-expired token, check if token exists but expired
+    if not user:
+        # Check if token exists but is expired
+        user_with_expired_token = db.query(User).filter(
+            User.email_verification_token == hashed_token
+        ).first()
+
+        if user_with_expired_token:
+            raise ApiError(
+                statusCode=400,
+                message="Token has expired",
+                code=ErrorCodes.TOKEN_EXPIRED,
+            )
+        else:
+            raise ApiError(
+                statusCode=400,
+                message="Invalid token",
+                code=ErrorCodes.TOKEN_INVALID,
+            )
+
+    # Step 5: Check user email not already verified
+    if user.is_email_verified:
+        raise ApiError(
+            statusCode=400,
+            message="Email already verified",
+            code=ErrorCodes.USER_ALREADY_VERIFIED,
+        )
+
+    # Step 6: Set email as verified and clear token fields
+    user.is_email_verified = True
+    user.email_verification_token = None
+    user.email_verification_token_expiry = None
+
+    # Step 7: Save changes to database
+    db.commit()
+
+    # Step 8: Return verified user
+    return user
 

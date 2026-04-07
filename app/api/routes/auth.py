@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.schemas.user import UserRegister, UserResponse, UserLogin
 from app.schemas.response import ApiResponse
-from app.services.auth_service import register_user, login_user, logout_user
+from app.services.auth_service import register_user, login_user, logout_user, verify_email
 from app.models.user import User
 from app.api.deps import get_current_user
 from ..limiter import limiter
@@ -190,4 +190,61 @@ def logout(
         statusCode=200,
         success=True,
         message="Logged out successfully"
+    )
+
+
+@router.get("/verify-email/{token}", response_model=ApiResponse)
+@limiter.limit("1/second")
+def verify_email_route(
+    request: Request,
+    token: str,
+    db: Session = Depends(get_db),
+):
+    """
+    Verify user email using token sent in registration email.
+
+    The email verification link is sent to the user's email during registration:
+    /api/auth/verify-email/{token}
+
+    User clicks the link or the frontend calls this endpoint with the verification token.
+    The endpoint validates the token hash against the database, marks the user's email
+    as verified if valid, and clears the temporary verification token.
+
+    Token validation flow (mirrors Express verifyEmail controller):
+    1. Hash the provided token using SHA256
+    2. Query database for user with matching hashed token and non-expired token
+    3. Determine error type if token not found (expired vs invalid)
+    4. Check if user email already verified
+    5. Set is_email_verified = True
+    6. Clear email verification token fields
+    7. Return verified user
+
+    Args:
+        request: FastAPI request object (required for rate limiting)
+        token: Verification token from URL path (unhashed)
+        db: Database session
+
+    Returns:
+        ApiResponse with:
+        - Verified user data in response body
+        - Success message and 200 status code
+
+    Raises:
+        ApiError(400): TOKEN_MISSING if token is empty
+        ApiError(400): TOKEN_INVALID if token hash doesn't match any user
+        ApiError(400): TOKEN_EXPIRED if token exists but is expired
+        ApiError(400): USER_ALREADY_VERIFIED if user's email already verified
+    """
+    # Verify token and get user
+    user = verify_email(db, token)
+
+    # Convert User model to UserResponse schema (validates and serializes)
+    user_response = UserResponse.model_validate(user)
+
+    # Return ApiResponse with verified user data
+    return ApiResponse(
+        statusCode=200,
+        success=True,
+        message="Email verified successfully. You can now login.",
+        data=user_response,
     )
