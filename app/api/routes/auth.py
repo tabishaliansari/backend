@@ -3,9 +3,9 @@ from fastapi.params import Depends
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
-from app.schemas.user import UserRegister, UserResponse, UserLogin, EmailRequest
+from app.schemas.user import UserRegister, UserResponse, UserLogin, EmailRequest, RefreshTokenResponse
 from app.schemas.response import ApiResponse
-from app.services.auth_service import register_user, login_user, logout_user, verify_email, resend_verification_email
+from app.services.auth_service import register_user, login_user, logout_user, verify_email, resend_verification_email, refresh_access_token
 from app.models.user import User
 from app.api.deps import get_current_user
 from ..limiter import limiter
@@ -305,4 +305,118 @@ async def resend_verification_email_route(
         success=True,
         message="Verification email sent successfully, check your registered email inbox",
         data=user_response,
+    )
+
+
+@router.get("/profile", response_model=ApiResponse)
+def get_profile(
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Get authenticated user's profile information.
+
+    Returns the current user's profile data without exposing sensitive fields
+    like password or refresh tokens.
+
+    Args:
+        current_user: Authenticated user (from get_current_user dependency)
+
+    Returns:
+        ApiResponse 200 with:
+        - data: UserResponse (id, fullname, username, email, role)
+        - message: "User profile"
+
+    Raises:
+        ApiError(401): If not authenticated (automatic from get_current_user)
+    """
+    # Convert User model to UserResponse schema (validates and serializes)
+    user_response = UserResponse.model_validate(current_user)
+
+    return ApiResponse(
+        statusCode=200,
+        success=True,
+        message="User profile",
+        data=user_response,
+    )
+
+
+@router.get("/refreshAccessToken", response_model=ApiResponse)
+@limiter.limit("5/minute")
+def refresh_access_token_route(
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    """
+    Refresh access and refresh tokens using existing refresh token.
+
+    Endpoint for renewing access tokens when they expire. Users provide their
+    refresh token via HTTP-only cookie, and this endpoint generates new
+    access and refresh tokens to extend their session.
+
+    This is a STATEFUL token refresh (stored in DB) unlike OAuth-style stateless
+    refresh. Allows immediate revocation by setting user.refresh_token = None.
+
+    Token rotation flow (mirrors Express refreshAccessToken controller):
+    1. Extract refreshToken from cookies
+    2. Call refresh_access_token service to validate and generate new tokens
+    3. Service validates token JWT and checks against stored value in DB
+    4. Service generates new access and refresh tokens
+    5. Service saves new refresh token to database
+    6. Set both new tokens as HTTP-only cookies (same flags as login)
+    7. Return 201 with new tokens in response body
+
+    Args:
+        request: FastAPI request object (for rate limiting, extracting cookies)
+        response: FastAPI Response object (for setting cookies)
+        db: Database session
+
+    Returns:
+        ApiResponse 201 with:
+        - data: {newAccessToken: str, newRefreshToken: str}
+        - message: "Tokens refreshed"
+        - Both tokens also set as HTTP-only cookies
+
+    Raises:
+        ApiError(401): REFRESH_TOKEN_MISSING if cookie missing
+        ApiError(403): REFRESH_TOKEN_INVALID if JWT invalid/expired
+        ApiError(404): USER_NOT_FOUND if user doesn't exist
+        ApiError(401): REFRESH_TOKEN_EXPIRED if token revoked/doesn't match stored
+        ApiError(429): If rate limited (5 per minute)
+    """
+    # Step 1: Extract refresh token from cookies
+    refresh_token = request.cookies.get("refreshToken")
+
+    # Step 2: Call service to validate and generate new tokens
+    access_token, new_refresh_token, user = refresh_access_token(db, refresh_token)
+
+    # Step 3: Set new access token as HTTP-only cookie
+    response.set_cookie(
+        key="accessToken",
+        value=access_token,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        max_age=3600,  # 1 hour (matches login cookie)
+    )
+
+    # Step 4: Set new refresh token as HTTP-only cookie
+    response.set_cookie(
+        key="refreshToken",
+        value=new_refresh_token,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        max_age=604800,  # 7 days (matches login cookie)
+    )
+
+    # Step 5: Return response with new tokens in body
+    return ApiResponse(
+        statusCode=201,
+        success=True,
+        message="Tokens refreshed",
+        data=RefreshTokenResponse(
+            newAccessToken=access_token,
+            newRefreshToken=new_refresh_token,
+        ),
     )

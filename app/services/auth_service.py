@@ -17,12 +17,13 @@ Future utilities to integrate:
 
 import logging
 from datetime import datetime
+from uuid import UUID
 import hashlib
 from sqlalchemy.orm import Session
 
 from app.models.user import User
 from app.schemas.user import UserRegister, UserLogin
-from app.core.security import hash_password, verify_password, create_access_token, create_refresh_token
+from app.core.security import hash_password, verify_password, create_access_token, create_refresh_token, decode_refresh_token
 from app.core.config import settings
 from app.utils.api_error import ApiError
 from app.core.error_codes import ErrorCodes
@@ -31,6 +32,7 @@ from app.utils.email import send_verification_email
 from app.repositories.user_repo import (
     get_user_by_email,
     get_user_by_username,
+    get_user_by_id,
     create_user as create_user_repo,
     update_user as update_user_repo,
 )
@@ -359,4 +361,115 @@ async def resend_verification_email(db: Session, email: str) -> User:
 
     # Step 6: Return updated user
     return user
+
+
+def refresh_access_token(db: Session, refresh_token: str) -> tuple[str, str, User]:
+    """
+    Refresh user's access and refresh tokens using existing refresh token.
+
+    Validates the refresh token, generates new tokens, stores them, and returns
+    both for setting as cookies.
+
+    Flow (matches Express refreshAccessToken controller):
+    1. Validate refresh token exists (not empty)
+    2. Decode refresh token JWT using decode_refresh_token()
+    3. If decode fails: raise 403 REFRESH_TOKEN_INVALID
+    4. Extract user ID from token payload
+    5. Fetch user from database
+    6. If not found: raise 404 USER_NOT_FOUND
+    7. Verify stored refresh_token matches provided token (prevents reuse/revocation)
+    8. If doesn't match: raise 401 REFRESH_TOKEN_EXPIRED
+    9. Generate new access token with user claims
+    10. Generate new refresh token with user claims
+    11. Update user.refresh_token with new token
+    12. Commit to database
+    13. Return (new_access_token, new_refresh_token, user)
+
+    Args:
+        db: Database session
+        refresh_token: JWT refresh token from cookies (unhashed)
+
+    Returns:
+        Tuple of (access_token: str, refresh_token: str, user: User)
+
+    Raises:
+        ApiError(401): REFRESH_TOKEN_MISSING if token not provided
+        ApiError(403): REFRESH_TOKEN_INVALID if JWT decode fails
+        ApiError(404): USER_NOT_FOUND if user doesn't exist
+        ApiError(401): REFRESH_TOKEN_EXPIRED if stored token doesn't match (revoked)
+    """
+    # Step 1: Validate refresh token exists
+    if not refresh_token:
+        raise ApiError(
+            statusCode=401,
+            message="No refresh token",
+            code=ErrorCodes.REFRESH_TOKEN_MISSING,
+        )
+
+    # Step 2: Decode refresh token JWT
+    payload = decode_refresh_token(refresh_token)
+
+    # Step 3: If decode fails, raise 403
+    if payload is None:
+        raise ApiError(
+            statusCode=403,
+            message="Invalid or expired refresh token",
+            code=ErrorCodes.REFRESH_TOKEN_INVALID,
+        )
+
+    # Step 4: Extract user ID from token payload
+    user_id_str = payload.get("sub")
+
+    if not user_id_str:
+        raise ApiError(
+            statusCode=403,
+            message="Invalid or expired refresh token",
+            code=ErrorCodes.REFRESH_TOKEN_INVALID,
+        )
+
+    # Convert user_id string to UUID
+    try:
+        user_id = UUID(user_id_str)
+    except (ValueError, TypeError, AttributeError):
+        raise ApiError(
+            statusCode=403,
+            message="Invalid or expired refresh token",
+            code=ErrorCodes.REFRESH_TOKEN_INVALID,
+        )
+
+    # Step 5: Fetch user from database
+    user = get_user_by_id(db, user_id)
+
+    # Step 6: If not found, raise 404
+    if not user:
+        raise ApiError(
+            statusCode=404,
+            message="User not found",
+            code=ErrorCodes.USER_NOT_FOUND,
+        )
+
+    # Step 7: Verify stored refresh_token matches provided token (prevents reuse after logout)
+    if refresh_token != user.refresh_token:
+        raise ApiError(
+            statusCode=401,
+            message="Refresh token is expired or used",
+            code=ErrorCodes.REFRESH_TOKEN_EXPIRED,
+        )
+
+    # Step 8: Generate new access token with user claims
+    new_access_token = create_access_token(
+        data={"sub": str(user.id), "email": user.email, "username": user.username}
+    )
+
+    # Step 9: Generate new refresh token with same claims
+    new_refresh_token = create_refresh_token(
+        data={"sub": str(user.id), "email": user.email, "username": user.username}
+    )
+
+    # Step 10: Update user.refresh_token with new token
+    user.refresh_token = new_refresh_token
+    db.commit()
+
+    # Step 11: Return new tokens and user
+    return (new_access_token, new_refresh_token, user)
 

@@ -166,3 +166,20 @@ class EmailRequest(BaseModel):
     email: EmailStr = Field(..., description="User email address")
 
     model_config = ConfigDict(json_schema_extra={"example": {"email": "user@example.com"}})
+
+
+class RefreshTokenResponse(BaseModel):
+    """
+    Refresh token response model.
+
+    Returned after successful token refresh with new access and refresh tokens.
+    """
+    newAccessToken: str = Field(..., description="New JWT access token")
+    newRefreshToken: str = Field(..., description="New JWT refresh token")
+
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "newAccessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+            "newRefreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        }
+    })
