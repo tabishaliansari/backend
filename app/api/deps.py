@@ -11,6 +11,7 @@ injection system.
 from uuid import UUID
 from fastapi import Depends, Request
 from sqlalchemy.orm import Session
+from fastapi.security import OAuth2PasswordBearer
 
 from app.db.database import get_db
 from app.core.security import decode_token
@@ -19,8 +20,36 @@ from app.models.user import User
 from app.utils.api_error import ApiError
 from app.core.error_codes import ErrorCodes
 
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login", auto_error=False)
 
-def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
+
+def get_token(request: Request, token: str | None = Depends(oauth2_scheme)) -> str:
+    """
+    Extract access token from either cookies or Authorization header.
+
+    Priority:
+    1. Cookies (browser)
+    2. Authorization header (Bearer token)
+    """
+
+    # 1️⃣ Try cookie first (primary for web)
+    cookie_token = request.cookies.get("accessToken")
+    if cookie_token:
+        return cookie_token
+
+    # 2️⃣ Fallback to Authorization header
+    if token:
+        return token
+
+    # 3️⃣ No token found
+    raise ApiError(
+        statusCode=401,
+        message="Access token missing. Please log in.",
+        code=ErrorCodes.USER_NOT_LOGGED_IN,
+    )
+
+
+def get_current_user(request: Request, db: Session = Depends(get_db), token: str = Depends(get_token)) -> User:
     """
     FastAPI dependency to get the currently authenticated user.
 
@@ -51,22 +80,21 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
         @router.get("/profile")
         def get_profile(current_user: User = Depends(get_current_user)):
             return {"username": current_user.username}
+    
+    
+    Hybrid authentication dependency:
+    Supports both cookie-based and Bearer token authentication.
+
+    Flow:
+    1. Extract token (cookie or header)
+    2. Decode JWT
+    3. Validate payload
+    4. Fetch user from DB
     """
-    # Step 1: Extract token from cookies
-    token = request.cookies.get("accessToken")
 
-    # Step 2: Validate token exists
-    if not token:
-        raise ApiError(
-            statusCode=401,
-            message="Access token missing. Please log in.",
-            code=ErrorCodes.USER_NOT_LOGGED_IN,
-        )
-
-    # Step 3: Decode and validate token
+    # Step 1: Decode and validate token
     payload = decode_token(token)
 
-    # Step 4: Validate token is valid (returns None if invalid/expired)
     if payload is None:
         raise ApiError(
             statusCode=401,
@@ -74,7 +102,7 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
             code=ErrorCodes.INVALID_ACCESS_TOKEN,
         )
 
-    # Step 5: Extract user ID from token payload
+    # Step 2: Extract user ID from token payload
     user_id_str = payload.get("sub")
 
     if not user_id_str:
@@ -84,7 +112,7 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
             code=ErrorCodes.INVALID_ACCESS_TOKEN,
         )
 
-    # Convert user_id string to UUID (stored as string in JWT)
+    # Step 3: Convert to UUID
     try:
         user_id = UUID(user_id_str)
     except (ValueError, TypeError, AttributeError):
@@ -94,10 +122,10 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
             code=ErrorCodes.INVALID_ACCESS_TOKEN,
         )
 
-    # Step 6: Fetch user from database
+    # Step 4: Fetch user from database
     user = get_user_by_id(db, user_id)
 
-    # Step 7: Validate user exists
+    # Step 5: Validate user exists
     if not user:
         raise ApiError(
             statusCode=401,
@@ -105,7 +133,7 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
             code=ErrorCodes.INVALID_ACCESS_TOKEN,
         )
 
-    # Step 8: Return authenticated user
+    # Step 6: Return authenticated user
     return user
 
 
