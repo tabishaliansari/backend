@@ -19,10 +19,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Base.metadata.create_all(bind=engine)
 
-app.include_router(auth)
 app.include_router(health)
+app.include_router(auth)
 app.include_router(users)
 
 app.state.limiter = limiter
