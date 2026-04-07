@@ -3,9 +3,9 @@ from fastapi.params import Depends
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
-from app.schemas.user import UserRegister, UserResponse, UserLogin, EmailRequest, RefreshTokenResponse
+from app.schemas.user import UserRegister, UserResponse, UserLogin, EmailRequest, RefreshTokenResponse, EmailVerificationStatus, ForgotPasswordRequest, PasswordResetRequest
 from app.schemas.response import ApiResponse
-from app.services.auth_service import register_user, login_user, logout_user, verify_email, resend_verification_email, refresh_access_token
+from app.services.auth_service import register_user, login_user, logout_user, verify_email, resend_verification_email, refresh_access_token, forgot_password_request, reset_password
 from app.models.user import User
 from app.api.deps import get_current_user
 from ..limiter import limiter
@@ -294,7 +294,7 @@ async def resend_verification_email_route(
             statusCode=200,
             success=True,
             message="Your email is already verified. Please log in",
-            data={"isEmailVerified": True},
+            data=EmailVerificationStatus(isEmailVerified=True),
         )
 
     # If email not verified, verification was sent, return 201 with user data
@@ -304,38 +304,6 @@ async def resend_verification_email_route(
         statusCode=201,
         success=True,
         message="Verification email sent successfully, check your registered email inbox",
-        data=user_response,
-    )
-
-
-@router.get("/profile", response_model=ApiResponse)
-def get_profile(
-    current_user: User = Depends(get_current_user),
-):
-    """
-    Get authenticated user's profile information.
-
-    Returns the current user's profile data without exposing sensitive fields
-    like password or refresh tokens.
-
-    Args:
-        current_user: Authenticated user (from get_current_user dependency)
-
-    Returns:
-        ApiResponse 200 with:
-        - data: UserResponse (id, fullname, username, email, role)
-        - message: "User profile"
-
-    Raises:
-        ApiError(401): If not authenticated (automatic from get_current_user)
-    """
-    # Convert User model to UserResponse schema (validates and serializes)
-    user_response = UserResponse.model_validate(current_user)
-
-    return ApiResponse(
-        statusCode=200,
-        success=True,
-        message="User profile",
         data=user_response,
     )
 
@@ -419,4 +387,111 @@ def refresh_access_token_route(
             newAccessToken=access_token,
             newRefreshToken=new_refresh_token,
         ),
+    )
+
+
+@router.post("/forgotPassword", response_model=ApiResponse)
+@limiter.limit("1/minute")
+async def forgot_password_route(
+    request: Request,
+    email_data: ForgotPasswordRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Request password reset by sending email with reset token.
+
+    Users who forgot their password can use this endpoint to request a password reset.
+    An email will be sent with a link containing a temporary reset token.
+
+    The user has 20 minutes to use the reset token before it expires.
+
+    Args:
+        request: FastAPI request object (required for rate limiting)
+        email_data: Request body with email field
+        db: Database session
+
+    Returns:
+        ApiResponse 201 with:
+        - data: UserResponse (user data)
+        - message: "Reset password email sent. Please check your inbox."
+
+    Raises:
+        ApiError(401): USER_NOT_FOUND if email doesn't exist
+        ApiError(429): If rate limit exceeded (max 1 per minute)
+    """
+    # Request password reset and get user
+    user = await forgot_password_request(db, email_data.email)
+
+    # Convert User model to UserResponse schema (validates and serializes)
+    user_response = UserResponse.model_validate(user)
+
+    return ApiResponse(
+        statusCode=201,
+        success=True,
+        message="Reset password email sent. Please check your inbox.",
+        data=user_response,
+    )
+
+
+@router.post("/resetPassword/{token}", response_model=ApiResponse)
+@limiter.limit("5/minute")
+def reset_password_route(
+    request: Request,
+    token: str,
+    password_data: PasswordResetRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Reset user password using verification token.
+
+    Users receive a password reset token via email. They can use this endpoint
+    along with the token to set a new password. The old password is immediately
+    invalidated.
+
+    The password reset token is valid for 20 minutes.
+
+    Flow:
+    1. Validate password reset token
+    2. Validate new passwords match
+    3. Hash new password and update user
+    4. Clear token fields from database
+    5. Return success response
+
+    Args:
+        request: FastAPI request object (required for rate limiting)
+        token: Password reset token from email link (URL path parameter)
+        password_data: Request body with password and confPassword fields
+        db: Database session
+
+    Returns:
+        ApiResponse 201 with:
+        - data: UserResponse (updated user data)
+        - message: "Password changed successfully"
+
+    Raises:
+        ApiError(400): TOKEN_MISSING if token is empty
+        ApiError(400): TOKEN_INVALID if token hash doesn't match any user
+        ApiError(400): TOKEN_EXPIRED if token exists but is expired
+        ApiError(400): PASSWORDS_DO_NOT_MATCH if password != confPassword
+        ApiError(429): If rate limit exceeded
+    """
+    # Validate passwords match
+    if password_data.password != password_data.confPassword:
+        raise ApiError(
+            statusCode=400,
+            message="Passwords do not match",
+            code=ErrorCodes.PASSWORDS_DO_NOT_MATCH,
+        )
+
+    # Reset password and get updated user
+    user = reset_password(db, token, password_data.password)
+
+    # Convert User model to UserResponse schema (validates and serializes)
+    user_response = UserResponse.model_validate(user)
+
+    return ApiResponse(
+        statusCode=201,
+        success=True,
+        message="Password changed successfully",
+        data=user_response,
     )

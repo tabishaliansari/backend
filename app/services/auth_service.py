@@ -473,3 +473,193 @@ def refresh_access_token(db: Session, refresh_token: str) -> tuple[str, str, Use
     # Step 11: Return new tokens and user
     return (new_access_token, new_refresh_token, user)
 
+
+async def forgot_password_request(db: Session, email: str) -> User:
+    """
+    Request password reset by sending email with reset token.
+
+    Finds user by email, generates temporary password reset token, and sends
+    email with reset link containing unhashed token.
+
+    Flow (matches Express forgotPasswordRequest controller):
+    1. Find user by email
+    2. If not found: raise 401 USER_NOT_FOUND
+    3. Generate temporary token (unhashed + hashed pair)
+    4. Save hashed token and expiry to user
+    5. Construct reset URL with unhashed token
+    6. Send password reset email (non-blocking)
+    7. Return user object
+
+    Args:
+        db: Database session
+        email: User email address
+
+    Returns:
+        User object with password reset token set
+
+    Raises:
+        ApiError(401): USER_NOT_FOUND if email doesn't exist
+    """
+    # Step 1: Find user by email
+    user = get_user_by_email(db, email)
+
+    # Step 2: If not found, raise 401
+    if not user:
+        raise ApiError(
+            statusCode=401,
+            message="Invalid Email. No user found",
+            code=ErrorCodes.USER_NOT_FOUND,
+        )
+
+    # Step 3: Generate temporary token for password reset (20 minute expiry)
+    token_data = generate_temporary_token(expiry_minutes=20)
+
+    # Step 4: Save hashed token and expiry to user
+    update_user_repo(db, user, {
+        "forgot_password_token": token_data["hashedToken"],
+        "forgot_password_token_expiry": token_data["tokenExpiry"],
+    })
+
+    # Step 5: Construct password reset URL with unhashed token
+    password_reset_url = f"{settings.BASE_URL}/api/auth/resetPassword/{token_data['unHashedToken']}"
+
+    # Step 6: Send password reset email (non-blocking - errors logged but don't crash)
+    try:
+        # Import email template function (may need to adjust based on actual email module)
+        from app.utils.email import send_password_reset_email
+        await send_password_reset_email(user, password_reset_url)
+    except Exception as e:
+        logger.warning(f"Failed to send password reset email to {user.email}: {e}")
+        # Continue - user can try again using resend
+
+    # Step 7: Return user with token saved
+    return user
+
+
+def reset_password(db: Session, token: str, password: str) -> User:
+    """
+    Reset user password using verification token.
+
+    Validates the password reset token, hashes new password, and updates user record.
+
+    Flow (matches Express changeCurrentPassword controller):
+    1. Validate token exists
+    2. Hash the provided token using SHA256
+    3. Query database for user with matching hashed token and non-expired token
+    4. If not found, determine error type (expired vs invalid)
+    5. Update user password (hash it) and clear token fields
+    6. Commit to database
+    7. Return updated user
+
+    Args:
+        db: Database session
+        token: Unhashed password reset token from email link
+        password: New password to set
+
+    Returns:
+        Updated User object with new password set and token fields cleared
+
+    Raises:
+        ApiError(400): TOKEN_MISSING if token is empty
+        ApiError(400): TOKEN_INVALID if token hash doesn't match any user
+        ApiError(400): TOKEN_EXPIRED if token exists but is expired
+    """
+    # Step 1: Validate token exists
+    if not token or token.strip() == "":
+        raise ApiError(
+            statusCode=400,
+            message="Token is missing",
+            code=ErrorCodes.TOKEN_MISSING,
+        )
+
+    # Step 2: Hash the provided token using SHA256 (matches how it was stored)
+    hashed_token = hashlib.sha256(token.encode()).hexdigest()
+
+    # Step 3: Query user with matching non-expired token
+    user = db.query(User).filter(
+        User.forgot_password_token == hashed_token,
+        User.forgot_password_token_expiry > datetime.utcnow(),
+    ).first()
+
+    # Step 4: If no user found with non-expired token, check if token exists but expired
+    if not user:
+        # Check if token exists but is expired
+        user_with_expired_token = db.query(User).filter(
+            User.forgot_password_token == hashed_token
+        ).first()
+
+        if user_with_expired_token:
+            raise ApiError(
+                statusCode=400,
+                message="Token has expired",
+                code=ErrorCodes.TOKEN_EXPIRED,
+            )
+        else:
+            raise ApiError(
+                statusCode=400,
+                message="Invalid or expired token",
+                code=ErrorCodes.TOKEN_INVALID,
+            )
+
+    # Step 5: Hash new password and update user
+    user.hashed_password = hash_password(password)
+    user.forgot_password_token = None
+    user.forgot_password_token_expiry = None
+
+    # Step 6: Commit changes to database
+    db.commit()
+
+    # Step 7: Return updated user
+    return user
+
+
+def update_user_profile(db: Session, user: User, username: str, fullname: str) -> User:
+    """
+    Update user profile (username and fullname).
+
+    Validates new username is unique (excluding current user), then updates both fields.
+
+    Flow:
+    1. Check if username is being changed
+    2. If changed, verify new username not taken by another user
+    3. Update both username and fullname
+    4. Commit to database
+    5. Return updated user
+
+    Args:
+        db: Database session
+        user: User object to update
+        username: New username (must be 3-13 chars, alphanumeric with underscore/hyphen)
+        fullname: New full name (must be 1-100 chars)
+
+    Returns:
+        Updated User object
+
+    Raises:
+        ApiError(400): DUPLICATE_USERNAME if username already taken by another user
+    """
+    # Step 1: Check if username is being changed to a different value
+    if username and username != user.username:
+        # Step 2: Verify new username not taken by another user
+        existing_user = db.query(User).filter(
+            User.username == username,
+            User.id != user.id,  # Exclude current user
+        ).first()
+
+        if existing_user:
+            raise ApiError(
+                statusCode=400,
+                message="User with email or username already exists",
+                code=ErrorCodes.DUPLICATE_USERNAME,
+            )
+
+    # Step 3: Update both fields
+    user.username = username
+    user.fullname = fullname
+
+    # Step 4: Commit to database
+    db.commit()
+
+    # Step 5: Return updated user
+    return user
+

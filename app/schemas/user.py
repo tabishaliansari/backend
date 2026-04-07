@@ -183,3 +183,80 @@ class RefreshTokenResponse(BaseModel):
             "newRefreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
         }
     })
+
+
+class EmailVerificationStatus(BaseModel):
+    """
+    Email verification status response model.
+
+    Returned when user tries to resend verification but email is already verified.
+    """
+    isEmailVerified: bool = Field(..., description="Whether the email is verified")
+
+    model_config = ConfigDict(json_schema_extra={"example": {"isEmailVerified": True}})
+
+
+class ForgotPasswordRequest(BaseModel):
+    """
+    Forgot password request validation.
+
+    Used for password reset request endpoint - just needs email.
+    """
+    email: EmailStr = Field(..., description="User email address")
+
+    model_config = ConfigDict(json_schema_extra={"example": {"email": "user@example.com"}})
+
+
+class PasswordResetRequest(BaseModel):
+    """
+    Password reset request validation.
+
+    Used for resetting password with token - requires new password and confirmation.
+    """
+    password: str = Field(
+        ...,
+        min_length=6,
+        max_length=100,
+        description="New password (minimum 6 characters)"
+    )
+    confPassword: str = Field(
+        ...,
+        min_length=6,
+        max_length=100,
+        description="Password confirmation (must match password)"
+    )
+
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "password": "newpassword123",
+            "confPassword": "newpassword123"
+        }
+    })
+
+
+class UpdateProfileRequest(BaseModel):
+    """
+    Update user profile request validation.
+
+    Used for updating username and fullname fields.
+    """
+    fullname: str = Field(
+        ...,
+        min_length=1,
+        max_length=100,
+        description="User's full name (letters, spaces, apostrophes only)"
+    )
+    username: str = Field(
+        ...,
+        min_length=3,
+        max_length=13,
+        pattern=r'^[a-zA-Z0-9_-]+$',
+        description="Username (3-13 chars, alphanumeric with underscore/hyphen)"
+    )
+
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "fullname": "John Updated",
+            "username": "johnupdated"
+        }
+    })
