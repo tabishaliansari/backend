@@ -17,7 +17,8 @@ from app.core.config import settings
 ALGORITHM = "HS256"
 
 # Password hashing configuration
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Use bcrypt_sha256 to avoid bcrypt's 72-byte input limit.
+pwd_context = CryptContext(schemes=["bcrypt_sha256"], deprecated="auto")
 
 
 def hash_password(password: str) -> str:
