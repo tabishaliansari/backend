@@ -12,35 +12,51 @@ Future utilities to integrate:
 - auto_verify_oauth_user() from app.utils.auth_helpers
 - should_require_password/username() for OAuth validation
 - get_public_user_data() for response serialization
-- generate_temporary_token() for password reset flow
 - create_refresh_token() from app.core.security for token refresh
 """
 
+import logging
 from sqlalchemy.orm import Session
 
 from app.models.user import User
 from app.schemas.user import UserRegister, UserLogin
 from app.core.security import hash_password, verify_password, create_access_token, create_refresh_token
+from app.core.config import settings
 from app.utils.api_error import ApiError
 from app.core.error_codes import ErrorCodes
+from app.utils.token_utils import generate_temporary_token
+from app.utils.email import send_verification_email
 from app.repositories.user_repo import (
     get_user_by_email,
     get_user_by_username,
     create_user as create_user_repo,
+    update_user as update_user_repo,
 )
 
+logger = logging.getLogger(__name__)
 
-def register_user(db: Session, user_data: UserRegister):
+
+async def register_user(db: Session, user_data: UserRegister):
     """
-    Register a new user with validation.
+    Register a new user with validation and email verification.
 
     Checks for duplicate username and email before creating user.
+    Generates email verification token and sends verification email.
 
     Password hashing:
     - Password is hashed using bcrypt in this service layer
     - Replaces Mongoose pre("save") hook that auto-hashed passwords
     - Hashing happens BEFORE user is saved to database
     - Uses passlib with bcrypt (10 salt rounds)
+
+    Email verification flow (mirrors Express registerUser controller):
+    1. Validate username and email are unique
+    2. Create user with hashed password
+    3. Generate temporary verification token
+    4. Save token and expiry to user
+    5. Construct verification URL with unhashed token
+    6. Send verification email (non-blocking if email fails)
+    7. Return user object
 
     OAuth verification (FUTURE):
     - Will use auto_verify_oauth_user() from utils.auth_helpers
@@ -77,6 +93,25 @@ def register_user(db: Session, user_data: UserRegister):
     # Replaces Mongoose pre("save") hook behavior
     hashed_password = hash_password(user_data.password)
     new_user = create_user_repo(db, user_data, hashed_password)
+
+    # Generate temporary token for email verification (20 minute expiry)
+    token_data = generate_temporary_token(expiry_minutes=20)
+
+    # Save token and expiry to user
+    update_user_repo(db, new_user, {
+        "email_verification_token": token_data["hashedToken"],
+        "email_verification_token_expiry": token_data["tokenExpiry"],
+    })
+
+    # Construct verification URL with unhashed token
+    verification_url = f"{settings.BASE_URL}/api/auth/verify-email/{token_data['unHashedToken']}"
+
+    # Send verification email (non-blocking - errors are logged but don't crash)
+    try:
+        await send_verification_email(new_user, verification_url)
+    except Exception as e:
+        logger.warning(f"Failed to send verification email to {new_user.email}: {e}")
+        # Continue - user can use resend verification endpoint
 
     # FUTURE: OAuth auto-verification
     # from app.utils.auth_helpers import auto_verify_oauth_user

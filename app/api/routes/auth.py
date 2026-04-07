@@ -11,9 +11,9 @@ from ..limiter import limiter
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
-@router.post("/register", response_model=UserResponse)
+@router.post("/register", response_model=ApiResponse)
 @limiter.limit("1/second")
-def register(
+async def register(
     request: Request,
     user_data: UserRegister,
     db: Session = Depends(get_db)
@@ -21,8 +21,20 @@ def register(
     """
     Register a new user with email and password.
 
-    Validates unique username and email, hashes password, creates user account.
+    Validates unique username and email, hashes password, creates user account,
+    generates email verification token, and sends verification email to user.
     User must verify email before logging in.
+
+    Flow:
+    1. Validate all fields are present
+    2. Check username is unique
+    3. Check email is unique
+    4. Hash password
+    5. Create user
+    6. Generate temporary email verification token
+    7. Save token to database
+    8. Send verification email with verification link
+    9. Return user data in response
 
     Args:
         request: FastAPI request object (required for rate limiting)
@@ -30,15 +42,31 @@ def register(
         db: Database session
 
     Returns:
-        UserResponse with created user data (id, fullname, username, email, role)
+        ApiResponse with:
+        - User data in response body (without sensitive fields)
+        - Success message and 201 Created status code
+        - Instruction to verify email
 
     Raises:
         ApiError(400): If username or email already exists
+        ApiError(400): If required fields are missing
     """
-    return register_user(db, user_data)
+    # Register user and generate verification email
+    user = await register_user(db, user_data)
+
+    # Convert User model to UserResponse schema (validates and serializes)
+    user_response = UserResponse.model_validate(user)
+
+    # Return ApiResponse with UserResponse data
+    return ApiResponse(
+        statusCode=201,
+        success=True,
+        message="User registered successfully. Please verify your email now.",
+        data=user_response,
+    )
 
 
-@router.post("/login")
+@router.post("/login", response_model=ApiResponse)
 @limiter.limit("1/second")
 def login(
     request: Request,
@@ -52,7 +80,7 @@ def login(
     Validates email and password, then creates access and refresh tokens.
     Tokens are set as HTTP-only secure cookies to prevent XSS attacks.
 
-    Flow (mirrors Express loginUser controller):
+    Flow:
     1. Validate email is registered in database
     2. Check email is verified
     3. Verify password matches hashed password
@@ -65,8 +93,8 @@ def login(
     Args:
         request: FastAPI request object (required for rate limiting)
         login_data: Login credentials (email, password)
-        db: Database session
         response: FastAPI Response object (injected for cookie setting)
+        db: Database session
 
     Returns:
         ApiResponse with:
@@ -102,19 +130,15 @@ def login(
         max_age=604800, # 7 days (604800 seconds)
     )
 
-    # Return custom response schema
-    # FastAPI auto-serializes Pydantic model to JSON
+    # Convert User model to UserResponse schema (validates and serializes)
+    user_response = UserResponse.model_validate(user)
+
+    # Return ApiResponse with UserResponse data
     return ApiResponse(
         statusCode=200,
         success=True,
         message="Login successful",
-        data={
-            "id": str(user.id),
-            "email": user.email,
-            "username": user.username,
-            "fullname": user.fullname,
-            "role": user.role,
-        },
+        data=user_response,
     )
 
 
