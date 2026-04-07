@@ -3,9 +3,9 @@ from fastapi.params import Depends
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
-from app.schemas.user import UserRegister, UserResponse, UserLogin
+from app.schemas.user import UserRegister, UserResponse, UserLogin, EmailRequest
 from app.schemas.response import ApiResponse
-from app.services.auth_service import register_user, login_user, logout_user, verify_email
+from app.services.auth_service import register_user, login_user, logout_user, verify_email, resend_verification_email
 from app.models.user import User
 from app.api.deps import get_current_user
 from ..limiter import limiter
@@ -210,7 +210,7 @@ def verify_email_route(
     The endpoint validates the token hash against the database, marks the user's email
     as verified if valid, and clears the temporary verification token.
 
-    Token validation flow (mirrors Express verifyEmail controller):
+    Token validation flow:
     1. Hash the provided token using SHA256
     2. Query database for user with matching hashed token and non-expired token
     3. Determine error type if token not found (expired vs invalid)
@@ -246,5 +246,63 @@ def verify_email_route(
         statusCode=200,
         success=True,
         message="Email verified successfully. You can now login.",
+        data=user_response,
+    )
+
+
+@router.post("/resend-verification-email", response_model=ApiResponse)
+@limiter.limit("1/minute")
+async def resend_verification_email_route(
+    request: Request,
+    email_data: EmailRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Resend verification email to user email address.
+
+    Users who didn't receive the original verification email or whose token expired
+    can use this endpoint to request a new verification email with a fresh token.
+    The new email will contain an updated verification link with a new token.
+
+    Rate limited to 1 request per minute per IP to prevent abuse.
+
+    Flow:
+    1. Validate user exists with provided email
+    2. If email already verified: Return 200 with verification status (no email sent)
+    3. If email not verified: Generate new token, send email, return 201
+    4. Return success response
+
+    Args:
+        request: FastAPI request object (required for rate limiting)
+        email_data: Request body with email field
+        db: Database session
+
+    Returns:
+        - If already verified: ApiResponse 200 with {isEmailVerified: true}
+        - If email sent: ApiResponse 201 with user data
+
+    Raises:
+        ApiError(400): USER_NOT_FOUND if email doesn't exist in system
+        ApiError(429): If rate limit exceeded (max 1 per minute)
+    """
+    # Resend verification email and get user
+    user = await resend_verification_email(db, email_data.email)
+
+    # If email already verified, return 200 with verification status
+    if user.is_email_verified:
+        return ApiResponse(
+            statusCode=200,
+            success=True,
+            message="Your email is already verified. Please log in",
+            data={"isEmailVerified": True},
+        )
+
+    # If email not verified, verification was sent, return 201 with user data
+    user_response = UserResponse.model_validate(user)
+
+    return ApiResponse(
+        statusCode=201,
+        success=True,
+        message="Verification email sent successfully, check your registered email inbox",
         data=user_response,
     )

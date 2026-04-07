@@ -115,11 +115,6 @@ async def register_user(db: Session, user_data: UserRegister):
         logger.warning(f"Failed to send verification email to {new_user.email}: {e}")
         # Continue - user can use resend verification endpoint
 
-    # FUTURE: OAuth auto-verification
-    # from app.utils.auth_helpers import auto_verify_oauth_user
-    # auto_verify_oauth_user(new_user)  # Sets is_email_verified=True if OAuth
-    # db.commit()
-
     return new_user
 
 
@@ -305,5 +300,63 @@ def verify_email(db: Session, token: str) -> User:
     db.commit()
 
     # Step 8: Return verified user
+    return user
+
+
+async def resend_verification_email(db: Session, email: str) -> User:
+    """
+    Resend verification email to user.
+
+    Generates a new verification token and sends a fresh verification email
+    to the user. Overwrites any previous token, so old verification links
+    will no longer work.
+
+    If email is already verified, returns user without throwing error.
+    The route handler will decide how to respond based on verification status.
+
+    Use case: User didn't receive original verification email or token expired
+
+    Args:
+        db: Database session
+        email: User email address
+
+    Returns:
+        User object (with new verification token if not already verified)
+
+    Raises:
+        ApiError(400): USER_NOT_FOUND if email doesn't exist
+    """
+    # Step 1: Get user by email
+    user = get_user_by_email(db, email)
+    if not user:
+        raise ApiError(
+            statusCode=400,
+            message="Account not found. Please verify your email or sign in again",
+            code=ErrorCodes.USER_NOT_FOUND,
+        )
+
+    # Step 2: Check email already verified - return user without throwing error
+    # Route handler will decide to return 200 with verification status
+    if user.is_email_verified:
+        return user
+
+    # Step 3: Generate new temporary verification token
+    token_data = generate_temporary_token(expiry_minutes=20)
+
+    # Step 4: Update user with new token (overwrites previous token)
+    update_user_repo(db, user, {
+        "email_verification_token": token_data["hashedToken"],
+        "email_verification_token_expiry": token_data["tokenExpiry"],
+    })
+
+    # Step 5: Send verification email (non-blocking - errors are logged but don't crash)
+    verification_url = f"{settings.BASE_URL}/api/auth/verify-email/{token_data['unHashedToken']}"
+    try:
+        await send_verification_email(user, verification_url)
+    except Exception as e:
+        logger.warning(f"Failed to resend verification email to {user.email}: {e}")
+        # Continue - token is already saved, user can try resend again
+
+    # Step 6: Return updated user
     return user
 

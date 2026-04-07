@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, ConfigDict
 from typing import Optional
 from uuid import UUID
 
@@ -155,3 +155,14 @@ class TokenResponse(BaseModel):
                 "token_type": "bearer"
             }
         }
+
+
+class EmailRequest(BaseModel):
+    """
+    Email request validation.
+
+    Used for email-based operations like resending verification emails.
+    """
+    email: EmailStr = Field(..., description="User email address")
+
+    model_config = ConfigDict(json_schema_extra={"example": {"email": "user@example.com"}})
