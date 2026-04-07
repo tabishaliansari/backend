@@ -6,7 +6,7 @@ class Settings(BaseSettings):
 
     # JWT Configuration - Access Token
     ACCESS_TOKEN_SECRET: str
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
+    ACCESS_TOKEN_EXPIRE_HOURS: int = 15
 
     # JWT Configuration - Refresh Token
     REFRESH_TOKEN_SECRET: str

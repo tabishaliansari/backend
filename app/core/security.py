@@ -53,7 +53,7 @@ def create_access_token(
     """
     Create a signed JWT access token for API authentication.
 
-    Short-lived token (default 15 minutes) used for authenticating API requests.
+    Short-lived token (default 6 hour) used for authenticating API requests.
 
     Args:
         data: Dictionary containing token claims (typically includes "sub" for user id)
@@ -67,7 +67,7 @@ def create_access_token(
     """
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + (
-        expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        expires_delta or timedelta(hours=settings.ACCESS_TOKEN_EXPIRE_HOURS)
     )
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, settings.ACCESS_TOKEN_SECRET, algorithm=ALGORITHM)
