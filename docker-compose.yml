@@ -1,13 +1,13 @@
 services:
   postgres:
-    image: postgres:latest
+    image: postgres:16
     container_name: my-postgres
     environment:
       POSTGRES_USER: myuser
       POSTGRES_PASSWORD: mypassword
       POSTGRES_DB: graphlm
     ports:
-      - 5433:5432
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
 

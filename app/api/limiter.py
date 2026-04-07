@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 
 from app.utils.api_error import ApiError
 from app.core.error_codes import ErrorCodes
-from app.utils import should_include_stack_trace
+from app.utils.error_utils import should_include_stack_trace
 from app.schemas.response import ApiResponse
 
 limiter = Limiter(key_func=get_remote_address)

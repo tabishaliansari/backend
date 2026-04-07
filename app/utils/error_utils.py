@@ -3,8 +3,6 @@
 import os
 from typing import Any, Dict, Optional
 
-from app.utils.api_error import ApiError
-
 
 def should_include_stack_trace() -> bool:
     """
@@ -32,6 +30,8 @@ def extract_error_message(error: Exception) -> str:
     Returns:
         str: The error message or a generic message if extraction fails
     """
+    from app.utils.api_error import ApiError
+
     if isinstance(error, ApiError):
         return error.message
 
@@ -47,7 +47,7 @@ def extract_error_message(error: Exception) -> str:
 
 
 def serialize_error_response(
-    error: ApiError, include_stack: bool = False
+    error, include_stack: bool = False
 ) -> Dict[str, Any]:
     """
     Format an ApiError as a dictionary for JSON response serialization.
@@ -97,3 +97,4 @@ def format_validation_errors(
         if isinstance(error, dict):
             formatted.append({"field": error.get("loc", ["unknown"])[0], "detail": error.get("msg", "Invalid value")})
     return formatted
+

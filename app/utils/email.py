@@ -22,8 +22,8 @@ mail_config = ConnectionConfig(
     MAIL_PASSWORD=settings.MAILTRAP_SMTP_PASS,
     MAIL_FROM=settings.MAILTRAP_SENDEREMAIL,
     MAIL_FROM_NAME=settings.MAIL_FROM_NAME,
-    MAIL_TLS=True,
-    MAIL_SSL=False,
+    MAIL_STARTTLS=True,
+    MAIL_SSL_TLS=False,
     USE_CREDENTIALS=True,
 )
 

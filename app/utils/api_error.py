@@ -17,7 +17,6 @@ from slowapi.errors import RateLimitExceeded
 from app.core.error_codes import ErrorCodes
 from app.utils.error_utils import should_include_stack_trace, serialize_error_response, format_validation_errors
 from app.schemas.response import ApiResponse
-from app.api.limiter import _rate_limit_exceeded_handler
 
 
 class ApiError(Exception):
@@ -204,6 +203,8 @@ def register_exception_handlers(app):
     Args:
         app: FastAPI application instance
     """
+    from app.api.limiter import _rate_limit_exceeded_handler
+
     app.add_exception_handler(ApiError, api_error_handler)
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
     app.add_exception_handler(Exception, general_exception_handler)
