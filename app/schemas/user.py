@@ -238,16 +238,17 @@ class UpdateProfileRequest(BaseModel):
     """
     Update user profile request validation.
 
-    Used for updating username and fullname fields.
+    Used for updating username and/or fullname fields.
+    Both fields are optional - users can update one or both.
     """
-    fullname: str = Field(
-        ...,
+    fullname: Optional[str] = Field(
+        None,
         min_length=1,
         max_length=100,
         description="User's full name (letters, spaces, apostrophes only)"
     )
-    username: str = Field(
-        ...,
+    username: Optional[str] = Field(
+        None,
         min_length=3,
         max_length=13,
         pattern=r'^[a-zA-Z0-9_-]+$',

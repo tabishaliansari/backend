@@ -116,12 +116,12 @@ def update_profile(
     """
     Update authenticated user's profile information.
 
-    Allows users to update their own username and fullname. Validates that the
-    new username is not already taken by another user.
+    Allows users to update their own username and/or fullname. At least one field
+    must be provided. Validates that the new username is not already taken.
 
     Args:
         request: FastAPI request object (required for rate limiting)
-        profile_data: Request body with username and fullname fields
+        profile_data: Request body with optional username and fullname fields
         current_user: Authenticated user (from get_current_user dependency)
         db: Database session
 
@@ -131,10 +131,19 @@ def update_profile(
         - message: "Account details updated successfully"
 
     Raises:
+        ApiError(400): If neither username nor fullname provided
         ApiError(400): DUPLICATE_USERNAME if username already taken
         ApiError(401): If not authenticated
         ApiError(429): If rate limit exceeded
     """
+    # Validate at least one field is provided
+    if profile_data.username is None and profile_data.fullname is None:
+        raise ApiError(
+            statusCode=400,
+            message="At least one field (username or fullname) must be provided",
+            code=ErrorCodes.MISSING_FIELDS,
+        )
+
     # Update user profile and get updated user
     updated_user = update_user_profile(
         db,
@@ -166,13 +175,13 @@ def update_user(
     """
     Update any user's profile information (admin only).
 
-    Allows admins to update any user's username and fullname. Validates that the
-    new username is not already taken by another user.
+    Allows admins to update any user's username and/or fullname. At least one field
+    must be provided. Validates that the new username is not already taken.
 
     Args:
         request: FastAPI request object (required for rate limiting)
         user_id: UUID of user to update (from URL path)
-        profile_data: Request body with username and fullname fields
+        profile_data: Request body with optional username and fullname fields
         admin_user: Authenticated admin user (from get_current_admin dependency)
         db: Database session
 
@@ -183,6 +192,7 @@ def update_user(
 
     Raises:
         ApiError(400): USER_NOT_FOUND if user_id doesn't exist
+        ApiError(400): If neither username nor fullname provided
         ApiError(400): DUPLICATE_USERNAME if username already taken
         ApiError(401): If not authenticated
         ApiError(403): If user is not admin
@@ -196,6 +206,14 @@ def update_user(
             statusCode=400,
             message="User not found",
             code=ErrorCodes.USER_NOT_FOUND,
+        )
+
+    # Validate at least one field is provided
+    if profile_data.username is None and profile_data.fullname is None:
+        raise ApiError(
+            statusCode=400,
+            message="At least one field (username or fullname) must be provided",
+            code=ErrorCodes.MISSING_FIELDS,
         )
 
     # Update user profile and get updated user

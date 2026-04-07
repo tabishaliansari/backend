@@ -613,24 +613,24 @@ def reset_password(db: Session, token: str, password: str) -> User:
     return user
 
 
-def update_user_profile(db: Session, user: User, username: str, fullname: str) -> User:
+def update_user_profile(db: Session, user: User, username: str = None, fullname: str = None) -> User:
     """
-    Update user profile (username and fullname).
+    Update user profile (username and/or fullname).
 
-    Validates new username is unique (excluding current user), then updates both fields.
+    Updates only the fields that are provided. Validates new username is unique
+    (excluding current user) if being changed.
 
     Flow:
-    1. Check if username is being changed
-    2. If changed, verify new username not taken by another user
-    3. Update both username and fullname
-    4. Commit to database
-    5. Return updated user
+    1. If username provided and different from current, verify new username not taken
+    2. Update provided fields (skip None values)
+    3. Commit to database
+    4. Return updated user
 
     Args:
         db: Database session
         user: User object to update
-        username: New username (must be 3-13 chars, alphanumeric with underscore/hyphen)
-        fullname: New full name (must be 1-100 chars)
+        username: New username (optional, 3-13 chars, alphanumeric with underscore/hyphen)
+        fullname: New full name (optional, 1-100 chars)
 
     Returns:
         Updated User object
@@ -638,9 +638,8 @@ def update_user_profile(db: Session, user: User, username: str, fullname: str) -
     Raises:
         ApiError(400): DUPLICATE_USERNAME if username already taken by another user
     """
-    # Step 1: Check if username is being changed to a different value
+    # Step 1: If username provided and different from current, verify uniqueness
     if username and username != user.username:
-        # Step 2: Verify new username not taken by another user
         existing_user = db.query(User).filter(
             User.username == username,
             User.id != user.id,  # Exclude current user
@@ -653,13 +652,15 @@ def update_user_profile(db: Session, user: User, username: str, fullname: str) -
                 code=ErrorCodes.DUPLICATE_USERNAME,
             )
 
-    # Step 3: Update both fields
-    user.username = username
-    user.fullname = fullname
+    # Step 2: Update only provided fields
+    if username is not None:
+        user.username = username
+    if fullname is not None:
+        user.fullname = fullname
 
-    # Step 4: Commit to database
+    # Step 3: Commit to database
     db.commit()
 
-    # Step 5: Return updated user
+    # Step 4: Return updated user
     return user
 
