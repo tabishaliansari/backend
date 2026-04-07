@@ -5,7 +5,9 @@ from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.schemas.user import UserRegister, UserResponse, UserLogin
 from app.schemas.response import ApiResponse
-from app.services.auth_service import register_user, login_user
+from app.services.auth_service import register_user, login_user, logout_user
+from app.models.user import User
+from app.api.deps import get_current_user
 from ..limiter import limiter
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -142,4 +144,50 @@ def login(
     )
 
 
+@router.post("/logout", response_model=ApiResponse)
+@limiter.limit("1/second")
+def logout(
+    request: Request,
+    response: Response,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Logout authenticated user and revoke refresh token.
 
+    Only accessible to authenticated users. Clears refresh token from database
+    and removes HTTP-only cookies to prevent further token reuse.
+
+    This endpoint requires valid authentication via the get_current_user dependency.
+    If the user is not authenticated, a 401 error is returned automatically.
+
+    Flow:
+    1. Validate user is authenticated (via get_current_user dependency)
+    2. Clear refresh token from database (invalidates future refresh attempts)
+    3. Clear both accessToken and refreshToken cookies
+    4. Return success response
+
+    Args:
+        request: FastAPI request object (required for rate limiting)
+        response: FastAPI Response object (injected for cookie clearing)
+        current_user: Authenticated user (from get_current_user dependency)
+        db: Database session
+
+    Returns:
+        ApiResponse with 200 status and success message
+
+    Raises:
+        ApiError(401): If not authenticated (automatic from get_current_user dependency)
+    """
+    # Clear refresh token from database (invalidates all future refresh attempts)
+    logout_user(db, current_user)
+
+    # Clear both cookies
+    response.delete_cookie(key="accessToken", httponly=True, secure=True, samesite="lax")
+    response.delete_cookie(key="refreshToken", httponly=True, secure=True, samesite="lax")
+
+    return ApiResponse(
+        statusCode=200,
+        success=True,
+        message="Logged out successfully"
+    )

@@ -198,3 +198,22 @@ def login_user(db: Session, login_data: UserLogin) -> tuple[str, str, User]:
     # Route handler will set tokens as HTTP-only cookies
     return (access_token, refresh_token, user)
 
+
+def logout_user(db: Session, user: User) -> None:
+    """
+    Logout user by clearing refresh token from database.
+
+    Invalidates the refresh token to prevent further token reuse.
+    This is the server-side logout mechanism - the client also clears cookies.
+
+    Args:
+        db: Database session
+        user: Authenticated user object (from get_current_user dependency)
+
+    Returns:
+        None
+    """
+    # Clear refresh token to revoke all future refresh attempts
+    user.refresh_token = None
+    db.commit()
+
