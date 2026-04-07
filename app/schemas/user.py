@@ -141,6 +141,11 @@ class UserResponse(BaseModel):
         }
 
 
+class LoginResponse(UserResponse):
+    access_token: str | None = None
+    token_type: str | None = "bearer"
+
+
 class TokenResponse(BaseModel):
     """
     Authentication token response model.
