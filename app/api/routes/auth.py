@@ -1,13 +1,19 @@
+import secrets
 from fastapi import APIRouter, Request, Response
 from fastapi.params import Depends
+from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
 from app.schemas.user import UserRegister, UserResponse, UserLogin, EmailRequest, RefreshTokenResponse, EmailVerificationStatus, ForgotPasswordRequest, PasswordResetRequest, LoginResponse
 from app.schemas.response import ApiResponse
 from app.services.auth_service import register_user, login_user, logout_user, verify_email, resend_verification_email, refresh_access_token, forgot_password_request, reset_password
+from app.services.github_oauth_service import handle_github_oauth, create_github_oauth_tokens
 from app.models.user import User
 from app.api.deps import get_current_user
+from app.core.config import settings
+from app.core.error_codes import ErrorCodes
+from app.utils.api_error import ApiError
 from ..limiter import limiter
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -499,4 +505,175 @@ def reset_password_route(
         success=True,
         message="Password changed successfully",
         data=user_response,
+    )
+
+
+@router.get("/github")
+@limiter.limit("1/minute")
+async def github_oauth_initiate(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """
+    Initiate GitHub OAuth flow.
+
+    Checks if user is already logged in (has valid accessToken cookie).
+    If logged in, they cannot initiate a new OAuth login.
+    Generates state token for CSRF protection and redirects to GitHub.
+
+    Flow:
+    1. Check if user already logged in via accessToken cookie
+    2. If logged in → error 401 (cannot initiate while authenticated)
+    3. Generate random state using secrets.token_urlsafe
+    4. Store state in HTTP-only cookie with 10 minute expiry
+    5. Generate GitHub authorization URL with state
+    6. Redirect to GitHub OAuth
+
+    Args:
+        request: FastAPI request object (for cookie access)
+        db: Database session (for validating token if present)
+
+    Returns:
+        RedirectResponse to GitHub OAuth authorization endpoint
+
+    Raises:
+        ApiError(401): If user already logged in (has valid accessToken)
+    """
+    # Check if user already logged in
+    access_token = request.cookies.get("accessToken")
+    if access_token:
+        raise ApiError(
+            statusCode=401,
+            message="Already logged in. Please logout first to use GitHub OAuth.",
+            code=ErrorCodes.UNAUTHORIZED,
+        )
+
+    # Generate state for CSRF protection
+    state = secrets.token_urlsafe(32)
+
+    # Construct GitHub OAuth URL
+    github_auth_url = (
+        f"https://github.com/login/oauth/authorize?"
+        f"client_id={settings.GITHUB_CLIENT_ID}&"
+        f"redirect_uri={settings.GITHUB_REDIRECT_URI}&"
+        f"scope=user:email&"
+        f"state={state}"
+    )
+
+    # Create redirect response
+    response = RedirectResponse(url=github_auth_url)
+
+    # Store state in HTTP-only cookie (10 minute expiry)
+    response.set_cookie(
+        key="oauth_state",
+        value=state,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        max_age=600,  # 10 minutes
+    )
+
+    return response
+
+
+@router.get("/github/callback", response_model=ApiResponse)
+@limiter.limit("1/minute")
+async def github_oauth_callback(
+    request: Request,
+    response: Response,
+    code: str = None,
+    state: str = None,
+    db: Session = Depends(get_db),
+):
+    """
+    Handle GitHub OAuth callback.
+
+    GitHub redirects here after user authorizes. This endpoint:
+    1. Validates state matches (CSRF protection)
+    2. Exchanges code for GitHub access token
+    3. Fetches GitHub user data
+    4. Resolves email (handles private emails)
+    5. Handles 3 cases: existing GitHub user, existing local user (error), new user
+    6. Generates JWT tokens and sets cookies
+    7. Returns user data
+
+    Args:
+        request: FastAPI request object (for cookie access)
+        response: FastAPI Response object (for setting cookies)
+        code: Authorization code from GitHub (query param)
+        state: State token from GitHub (query param)
+        db: Database session
+
+    Returns:
+        ApiResponse 200 with:
+        - accessToken and refreshToken set as HTTP-only cookies
+        - User data in response body
+        - Success message
+
+    Raises:
+        ApiError(400): If code or state missing
+        ApiError(401): If state mismatch (CSRF attack)
+        ApiError(400): If GitHub OAuth exchange fails
+        ApiError(400): If account exists with email/password (OAUTH_ACCOUNT_EXISTS)
+        ApiError(429): If rate limited
+    """
+    # Step 1: Validate code and state parameters
+    if not code or not state:
+        raise ApiError(
+            statusCode=400,
+            message="Missing code or state parameter",
+            code=ErrorCodes.BAD_REQUEST,
+        )
+
+    # Step 2: Validate state matches (CSRF protection)
+    oauth_state = request.cookies.get("oauth_state")
+    if not oauth_state or oauth_state != state:
+        raise ApiError(
+            statusCode=401,
+            message="State mismatch. Possible CSRF attack.",
+            code=ErrorCodes.INVALID_OAUTH_STATE,
+        )
+
+    # Step 3: Clear oauth_state cookie
+    response.delete_cookie(key="oauth_state", httponly=True, secure=True, samesite="lax")
+
+    # Step 4: Execute GitHub OAuth flow (exchange code, fetch user, handle creation/login)
+    user = await handle_github_oauth(db, code)
+
+    # Step 5: Generate tokens
+    access_token, refresh_token = create_github_oauth_tokens(user)
+    db.commit()  # Save refresh token to database
+
+    # Step 6: Set tokens as HTTP-only cookies
+    response.set_cookie(
+        key="accessToken",
+        value=access_token,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        max_age=3600,  # 1 hour
+    )
+
+    response.set_cookie(
+        key="refreshToken",
+        value=refresh_token,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        max_age=604800,  # 7 days
+    )
+
+    # Step 7: Return user response
+    user_response = UserResponse.model_validate(user)
+
+    login_response = LoginResponse(
+        **user_response.model_dump(),
+        access_token=access_token,
+    )
+
+    return ApiResponse(
+        statusCode=200,
+        success=True,
+        message="GitHub login successful",
+        data=login_response,
     )

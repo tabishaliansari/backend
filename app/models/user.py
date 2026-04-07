@@ -21,6 +21,7 @@ class User(Base):
 
     google_id: Mapped[str | None] = mapped_column(unique=True, nullable=True)
     github_id: Mapped[str | None] = mapped_column(unique=True, nullable=True)
+    auth_provider: Mapped[str] = mapped_column(default="local")
 
     fullname: Mapped[str | None] = mapped_column(nullable=True)
 
