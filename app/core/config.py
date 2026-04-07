@@ -25,6 +25,15 @@ class Settings(BaseSettings):
     MAILTRAP_SENDEREMAIL: str = "noreply@example.com"
     MAIL_FROM_NAME: str = "GraphLM Team"
 
+    # Cloudinary Configuration
+    CLOUDINARY_CLOUD_NAME: str = ""
+    CLOUDINARY_API_KEY: str = ""
+    CLOUDINARY_API_SECRET: str = ""
+
+    # File Upload Configuration
+    MAX_AVATAR_FILE_SIZE: int = 1_048_576  # 1MB in bytes
+    ALLOWED_IMAGE_TYPES: list = ["image/jpeg", "image/png", "image/webp", "image/gif"]
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

@@ -1,5 +1,6 @@
 alembic
 bcrypt
+cloudinary
 email-validator
 fastapi
 fastapi-mail

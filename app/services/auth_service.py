@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session
 from app.models.user import User
 from app.schemas.user import UserRegister, UserLogin
 from app.core.security import hash_password, verify_password, create_access_token, create_refresh_token, decode_refresh_token
+from app.services.cloudinary_service import upload_avatar_to_cloudinary, delete_avatar_from_cloudinary
 from app.core.config import settings
 from app.utils.api_error import ApiError
 from app.core.error_codes import ErrorCodes
@@ -662,5 +663,55 @@ def update_user_profile(db: Session, user: User, username: str = None, fullname:
     db.commit()
 
     # Step 4: Return updated user
+    return user
+
+
+async def upload_user_avatar(db: Session, user: User, file) -> User:
+    """
+    Upload user avatar to Cloudinary and update database.
+
+    Handles avatar upload flow: deletes old avatar if exists, uploads new avatar,
+    updates database with secure_url and public_id from Cloudinary.
+
+    Flow:
+    1. Extract old public_id from user.avatar dict (if exists)
+    2. Call delete_avatar_from_cloudinary() - safe if public_id is empty/null
+    3. Upload new avatar to Cloudinary
+    4. Update user.avatar with new url and public_id
+    5. Commit to database
+    6. Return updated user
+
+    Args:
+        db: Database session
+        user: Current user object (from get_current_user dependency)
+        file: UploadFile object from FastAPI file upload
+
+    Returns:
+        Updated User object with new avatar
+
+    Raises:
+        ApiError: If Cloudinary upload fails (500 AVATAR_UPLOAD_FAILED)
+    """
+
+    # Step 1: Extract old public_id if avatar exists
+    old_public_id = user.avatar.get("public_id") if user.avatar else None
+
+    # Step 2: Delete old avatar from Cloudinary if it exists (safe if empty)
+    if old_public_id:
+        delete_avatar_from_cloudinary(old_public_id)
+
+    # Step 3: Upload new avatar to Cloudinary
+    cloudinary_response = upload_avatar_to_cloudinary(file, str(user.id))
+
+    # Step 4: Update user avatar field with new url and public_id
+    user.avatar = {
+        "url": cloudinary_response["secure_url"],
+        "public_id": cloudinary_response["public_id"]
+    }
+
+    # Step 5: Commit changes to database
+    db.commit()
+
+    # Step 6: Return updated user
     return user
 

@@ -6,19 +6,20 @@ Most endpoints are admin-only.
 """
 
 from uuid import UUID
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, File, UploadFile
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
 from app.models.user import User
 from app.schemas.response import ApiResponse
-from app.schemas.user import UserResponse, UpdateProfileRequest
+from app.schemas.user import UserResponse, UpdateProfileRequest, AvatarResponse, validate_avatar_file
 from app.api.deps import get_current_user, get_current_admin
 from app.repositories.user_repo import get_user_by_id
-from app.services.auth_service import update_user_profile
+from app.services.auth_service import update_user_profile, upload_user_avatar
 from app.utils.api_error import ApiError
 from app.core.error_codes import ErrorCodes
 from app.api.limiter import limiter
+from app.core.config import settings
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -232,4 +233,68 @@ def update_user(
         success=True,
         message="Account details updated successfully",
         data=user_response,
+    )
+
+
+@router.patch("/updateAvatar", response_model=ApiResponse)
+@limiter.limit("5/minute")
+async def update_avatar(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    file: UploadFile = File(...),
+):
+    """
+    Update authenticated user's profile avatar.
+
+    Uploads image file to Cloudinary, automatically deletes old avatar if exists,
+    and updates user profile with new avatar URL and public ID.
+
+    Accepts JPEG, PNG, WebP, or GIF images up to 1MB in size.
+
+    Args:
+        request: FastAPI request object (required for rate limiting)
+        current_user: Authenticated user (from get_current_user dependency)
+        db: Database session
+        file: Image file to upload (multipart/form-data)
+
+    Returns:
+        ApiResponse 200 with:
+        - data: AvatarResponse (url: Cloudinary secure URL, public_id: for deletion)
+        - message: "Avatar uploaded successfully"
+
+    Raises:
+        ApiError(400): INVALID_FILE_TYPE if file type not in allowed types
+        ApiError(400): FILE_TOO_LARGE if file size exceeds 1MB
+        ApiError(401): If not authenticated
+        ApiError(429): If rate limit exceeded (5/minute)
+        ApiError(500): AVATAR_UPLOAD_FAILED if Cloudinary upload fails
+    """
+    # Validate file type
+    if file.content_type not in settings.ALLOWED_IMAGE_TYPES:
+        raise ApiError(
+            statusCode=400,
+            message=f"Invalid file type. Allowed types: {', '.join(settings.ALLOWED_IMAGE_TYPES)}",
+            code=ErrorCodes.INVALID_FILE_TYPE,
+        )
+
+    # Validate file size (check if size property is available)
+    if file.size is not None and file.size > settings.MAX_AVATAR_FILE_SIZE:
+        raise ApiError(
+            statusCode=400,
+            message=f"File too large. Maximum size: {settings.MAX_AVATAR_FILE_SIZE / 1024 / 1024:.1f}MB",
+            code=ErrorCodes.FILE_TOO_LARGE,
+        )
+
+    # Upload avatar and update user
+    updated_user = await upload_user_avatar(db, current_user, file)
+
+    # Create response with avatar data
+    avatar_response = AvatarResponse(**updated_user.avatar)
+
+    return ApiResponse(
+        statusCode=200,
+        success=True,
+        message="Avatar uploaded successfully",
+        data=avatar_response,
     )

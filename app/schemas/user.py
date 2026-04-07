@@ -1,6 +1,8 @@
 from pydantic import BaseModel, EmailStr, Field, ConfigDict
 from typing import Optional
 from uuid import UUID
+from fastapi import UploadFile
+from app.core.config import settings
 
 
 class UserRegister(BaseModel):
@@ -261,3 +263,53 @@ class UpdateProfileRequest(BaseModel):
             "username": "johnupdated"
         }
     })
+
+
+class AvatarResponse(BaseModel):
+    """
+    Avatar data response model.
+
+    Returned after successful avatar upload with Cloudinary secure URL and public ID.
+    """
+    url: str = Field(..., description="Cloudinary secure HTTPS URL of uploaded avatar")
+    public_id: str = Field(..., description="Cloudinary public ID for avatar (used for deletion)")
+
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "url": "https://res.cloudinary.com/cloud/image/upload/v123/avatars/avatar_uuid.jpg",
+            "public_id": "avatars/avatar_550e8400-e29b-41d4-a716-446655440000"
+        }
+    })
+
+
+def validate_avatar_file(file: UploadFile, allowed_types: list = None, max_size: int = None) -> None:
+    """
+    Validate avatar file type and size.
+
+    Checks that the file is an allowed image MIME type and does not exceed max size.
+    Raises ValueError if validation fails (caught by route handler and converted to ApiError).
+
+    Args:
+        file: UploadFile object from FastAPI file upload
+        allowed_types: List of allowed MIME types (defaults to settings.ALLOWED_IMAGE_TYPES)
+        max_size: Max file size in bytes (defaults to settings.MAX_AVATAR_FILE_SIZE)
+
+    Raises:
+        ValueError: If file type not in allowed types or size exceeds limit
+    """
+    if allowed_types is None:
+        allowed_types = settings.ALLOWED_IMAGE_TYPES
+    if max_size is None:
+        max_size = settings.MAX_AVATAR_FILE_SIZE
+
+    # Validate file type
+    if file.content_type not in allowed_types:
+        raise ValueError(
+            f"Invalid file type. Allowed types: {', '.join(allowed_types)}"
+        )
+
+    # Validate file size if available
+    if file.size is not None and file.size > max_size:
+        raise ValueError(
+            f"File too large. Maximum size: {max_size / 1024 / 1024:.1f}MB"
+        )

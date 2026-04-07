@@ -33,7 +33,7 @@ class User(Base):
         JSON,
         default=lambda: {
             "url": "https://placehold.co/600x400",
-            "localpath": ""
+            "public_id": ""
         }
     )
     role: Mapped[UserRole] = mapped_column(Enum(UserRole), default=UserRole.user)
