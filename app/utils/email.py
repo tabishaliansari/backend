@@ -2,6 +2,7 @@ import logging
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from pathlib import Path
 from fastapi_mail import FastMail, MessageSchema, ConnectionConfig
+from fastapi_mail.schemas import MessageType, MultipartSubtypeEnum
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -55,31 +56,35 @@ async def send_email(
     """
     Send email via SMTP (Mailtrap) with both HTML and plain text versions.
 
-    Mirrors Express nodemailer behavior:
-    - Receives pre-rendered HTML and plaintext
-    - Sends both versions in same email
-
-    This matches the Express flow:
-    1. Generate content object
-    2. Render to HTML (separate template)
-    3. Render to plaintext (separate template)
-    4. Send both versions
+    Uses multipart/alternative to send both HTML and plain text.
+    Email clients prefer HTML but fall back to plain text if needed.
 
     Args:
         to_email: Recipient email address
         subject: Email subject
-        html_content: Pre-rendered HTML email body
-        text_content: Pre-rendered plain text email body
+        html_content: HTML email body
+        text_content: Plain text email body
 
     Note:
         Errors are logged but do not crash the application.
     """
     try:
+        # Option 1: Send HTML directly (simpler, but no plain text fallback)
+        # message = MessageSchema(
+        #     subject=subject,
+        #     recipients=[to_email],
+        #     body=html_content,
+        #     subtype=MessageType.html,
+        # )
+
+        # Option 2: Send both HTML and plain text versions
         message = MessageSchema(
             subject=subject,
             recipients=[to_email],
-            html=html_content,
             body=text_content,
+            alternative_body=html_content,
+            subtype=MessageType.plain,
+            multipart_subtype=MultipartSubtypeEnum.alternative,
         )
 
         fm = FastMail(mail_config)
