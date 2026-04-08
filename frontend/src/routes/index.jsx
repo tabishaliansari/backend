@@ -10,6 +10,9 @@ import { setNavigator } from '@/utils/navigation'
 import AppLayout from '@/layouts/AppLayout'
 import AuthPage from '@/pages/AuthPage'
 import VerifyEmailPage from '@/pages/VerifyEmailPage'
+import EmailVerifiedPage from '@/pages/EmailVerifiedPage'
+import ForgotPasswordPage from '@/pages/ForgotPasswordPage'
+import ResetPasswordPage from '@/pages/ResetPasswordPage'
 import Landing from '@/pages/Landing'
 import Dashboard from '@/pages/Dashboard'
 import Chat from '@/pages/Chat'
@@ -43,6 +46,18 @@ const router = createBrowserRouter([
       {
         path: 'auth/verify',
         element: <VerifyEmailPage />,
+      },
+      {
+        path: 'email-verified',
+        element: <EmailVerifiedPage />,
+      },
+      {
+        path: 'forgot-password',
+        element: <ForgotPasswordPage />,
+      },
+      {
+        path: 'reset-password',
+        element: <ResetPasswordPage />,
       },
       {
         path: 'dashboard',

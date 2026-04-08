@@ -108,9 +108,9 @@ async def register_user(db: Session, user_data: UserRegister):
         "email_verification_token_expiry": token_data["tokenExpiry"],
     })
 
-    # Construct verification URL with unhashed token
-    base_url = settings.BASE_URL.rstrip("/")
-    verification_url = f"{base_url}/auth/verify-email/{token_data['unHashedToken']}"
+    # Construct verification URL with unhashed token (frontend URL with query param)
+    client_url = settings.CLIENT_URL.rstrip("/")
+    verification_url = f"{client_url}/email-verified?token={token_data['unHashedToken']}"
 
     # Send verification email (non-blocking - errors are logged but don't crash)
     try:
@@ -354,8 +354,8 @@ async def resend_verification_email(db: Session, email: str) -> User:
     })
 
     # Step 5: Send verification email (non-blocking - errors are logged but don't crash)
-    base_url = settings.BASE_URL.rstrip("/")
-    verification_url = f"{base_url}/auth/verify-email/{token_data['unHashedToken']}"
+    client_url = settings.CLIENT_URL.rstrip("/")
+    verification_url = f"{client_url}/email-verified?token={token_data['unHashedToken']}"
     try:
         await send_verification_email(user, verification_url)
     except Exception as e:
@@ -523,9 +523,9 @@ async def forgot_password_request(db: Session, email: str) -> User:
         "forgot_password_token_expiry": token_data["tokenExpiry"],
     })
 
-    # Step 5: Construct password reset URL with unhashed token
-    base_url = settings.BASE_URL.rstrip("/")
-    password_reset_url = f"{base_url}/auth/resetPassword/{token_data['unHashedToken']}"
+    # Step 5: Construct password reset URL with unhashed token (frontend URL with query param)
+    client_url = settings.CLIENT_URL.rstrip("/")
+    password_reset_url = f"{client_url}/reset-password?token={token_data['unHashedToken']}"
 
     # Step 6: Send password reset email (non-blocking - errors logged but don't crash)
     try:

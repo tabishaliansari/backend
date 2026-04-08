@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"  # development, testing, production
     DEBUG: bool = False
     BASE_URL: str = "http://localhost:8000"
+    CLIENT_URL: str = "http://localhost:5173"
 
     # Email Configuration (SMTP)
     MAILTRAP_SMTP_HOST: str = "smtp.mailtrap.io"

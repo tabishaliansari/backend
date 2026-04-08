@@ -60,27 +60,26 @@ axiosInstance.interceptors.response.use(
           return Promise.reject(error);
         }
 
-        const response = await axios.post(
+        const response = await axios.get(
           `${API_URL}/auth/refreshAccessToken`,
-          { refreshToken },
           { withCredentials: true }
         );
 
-        if (response.data.data.accessToken) {
+        if (response.data.data.newAccessToken) {
           localStorage.setItem(
             StorageKeys.ACCESS_TOKEN,
-            response.data.data.accessToken
+            response.data.data.newAccessToken
           );
         }
 
-        if (response.data.data.refreshToken) {
+        if (response.data.data.newRefreshToken) {
           localStorage.setItem(
             StorageKeys.REFRESH_TOKEN,
-            response.data.data.refreshToken
+            response.data.data.newRefreshToken
           );
         }
 
-        originalRequest.headers.Authorization = `Bearer ${response.data.data.accessToken}`;
+        originalRequest.headers.Authorization = `Bearer ${response.data.data.newAccessToken}`;
 
         return axiosInstance(originalRequest);
       } catch (error) {

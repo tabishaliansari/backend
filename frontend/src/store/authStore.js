@@ -63,7 +63,7 @@ const useAuthStore = create((set, get) => ({
     try {
       const response = await authService.login(credentials);
       set({
-        user: response.data.user,
+        user: response.data,
         isAuthenticated: true,
         isLoading: false,
         error: null,
@@ -183,10 +183,10 @@ const useAuthStore = create((set, get) => ({
   //     }
   //   },
 
-  resendEmailVerification: async () => {
+  resendEmailVerification: async (email) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await authService.resendEmailVerification();
+      const response = await authService.resendEmailVerification(email);
       set({ isLoading: false });
       return response;
     } catch (error) {

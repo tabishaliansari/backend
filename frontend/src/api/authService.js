@@ -35,15 +35,15 @@ const authService = {
     return response.data;
   },
 
-  getCurrentUser: async (userdata) => {
-    const response = await axiosInstance.post("/auth/profile", userdata);
+  getCurrentUser: async () => {
+    const response = await axiosInstance.get("/users/profile");
 
     return response.data;
   },
 
   // Verify email
   verifyEmail: async (token) => {
-    const response = await axiosInstance.get(`/auth/verifyEmail/${token}`);
+    const response = await axiosInstance.get(`/auth/verify-email/${token}`);
     return response.data;
   },
 
@@ -56,9 +56,10 @@ const authService = {
   },
 
   // Reset password with token
-  resetPassword: async (token, newPassword) => {
+  resetPassword: async (token, password) => {
     const response = await axiosInstance.post(`/auth/resetPassword/${token}`, {
-      newPassword,
+      password,
+      confPassword: password,
     });
     return response.data;
   },
@@ -74,7 +75,7 @@ const authService = {
 
   // Resend email verification
   resendEmailVerification: async (email) => {
-    const response = await axiosInstance.post("/auth/resendVerificationEmail", {
+    const response = await axiosInstance.post("/auth/resend-verification-email", {
       email,
     });
     return response.data;
@@ -82,26 +83,19 @@ const authService = {
 
   // Refresh access token
   refreshAccessToken: async () => {
-    const refreshToken = localStorage.getItem(StorageKeys.REFRESH_TOKEN);
-    if (!refreshToken) {
-      throw new Error("No refresh token available");
-    }
+    const response = await axiosInstance.get("/auth/refreshAccessToken");
 
-    const response = await axiosInstance.post("/auth/refreshAccessToken", {
-      refreshToken,
-    });
-
-    if (response.data?.data?.accessToken) {
+    if (response.data?.data?.newAccessToken) {
       localStorage.setItem(
         StorageKeys.ACCESS_TOKEN,
-        response.data.data.accessToken,
+        response.data.data.newAccessToken,
       );
 
       // Update refresh token if a new one is provided
-      if (response.data?.data?.refreshToken) {
+      if (response.data?.data?.newRefreshToken) {
         localStorage.setItem(
           StorageKeys.REFRESH_TOKEN,
-          response.data.data.refreshToken,
+          response.data.data.newRefreshToken,
         );
       }
     }
