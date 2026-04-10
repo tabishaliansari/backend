@@ -1,12 +1,18 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import useAuthStore from '@/store/authStore'
+import useThemeStore from '@/store/themeStore'
+import githubOAuthService from '@/api/githubOAuthService'
+import GitHubMarkDark from '@/assets/github/github-mark.svg'
+import GitHubMarkWhite from '@/assets/github/github-mark-white.svg'
 import { toast } from 'sonner'
 
 function AuthPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { login, register, isLoading, error, clearError } = useAuthStore()
+  const theme = useThemeStore((state) => state.theme)
+  const gitHubLogo = theme === 'dark' ? GitHubMarkDark : GitHubMarkWhite
   const [authMode, setAuthMode] = useState('login')
 
   // Login form state
@@ -32,6 +38,18 @@ function AuthPage() {
       setAuthMode(modeFromUrl)
     }
   }, [searchParams])
+
+  // Map error codes to user-friendly messages
+  const getErrorMessage = (errorCode) => {
+    const errorMessages = {
+      OAUTH_ACCOUNT_EXISTS: "An account with this email already exists. Please login with your credentials instead.",
+      INVALID_OAUTH_STATE: "Security check failed. Please try GitHub authentication again.",
+      OAUTH_INVALID_CODE: "GitHub authentication code expired. Please try again.",
+      OAUTH_PROVIDER_ERROR: "Failed to fetch your GitHub profile. Please try again.",
+      BAD_REQUEST: "Invalid request. Please try again.",
+    }
+    return errorMessages[errorCode] || "GitHub authentication failed. Please try again."
+  }
 
   const handleLoginChange = (e) => {
     const { name, value } = e.target
@@ -94,6 +112,14 @@ function AuthPage() {
         {authMode === 'login' ? (
           // Login Form
           <form onSubmit={handleLoginSubmit} className="space-y-4">
+            {/* OAuth Error Message */}
+            {searchParams.get('error') && (
+              <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400 rounded-lg text-sm border border-yellow-200 dark:border-yellow-800">
+                <p className="font-medium mb-1">GitHub Authentication Failed</p>
+                <p>{getErrorMessage(searchParams.get('error'))}</p>
+              </div>
+            )}
+
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Email
@@ -143,6 +169,24 @@ function AuthPage() {
               className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
             >
               {isLoading ? 'Logging in...' : 'Login'}
+            </button>
+
+            <div className="relative my-4">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-300 dark:border-gray-600"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-2 bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400">or</span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => githubOAuthService.redirectToGitHub()}
+              className="w-full flex items-center justify-center gap-2 bg-gray-800 hover:bg-gray-900 dark:bg-gray-700 dark:hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
+            >
+              <img src={gitHubLogo} alt="GitHub" className="w-5 h-5" />
+              <span>Continue with GitHub</span>
             </button>
           </form>
         ) : (
@@ -249,6 +293,24 @@ function AuthPage() {
               className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
             >
               {isLoading ? 'Creating account...' : 'Sign Up'}
+            </button>
+
+            <div className="relative my-4">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-300 dark:border-gray-600"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-2 bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400">or</span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => githubOAuthService.redirectToGitHub()}
+              className="w-full flex items-center justify-center gap-2 bg-gray-800 hover:bg-gray-900 dark:bg-gray-700 dark:hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
+            >
+              <img src={gitHubLogo} alt="GitHub" className="w-5 h-5" />
+              <span>Sign up with GitHub</span>
             </button>
           </form>
         )}

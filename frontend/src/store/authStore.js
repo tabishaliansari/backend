@@ -1,5 +1,4 @@
 import { create } from "zustand";
-import { StorageKeys } from "@/utils/constants";
 import { authService } from "@/api";
 
 const getAvatarUrl = (user) => {
@@ -9,24 +8,14 @@ const getAvatarUrl = (user) => {
 
 const initializeAuth = async (set) => {
   try {
-    if (authService.isLoggedIn()) {
-      const response = await authService.getCurrentUser();
-      set({
-        user: response.data,
-        isAuthenticated: true,
-        isLoading: false,
-        error: null,
-        isInitialized: true,
-      });
-    } else {
-      set({
-        user: null,
-        isAuthenticated: false,
-        isLoading: false,
-        error: null,
-        isInitialized: true,
-      });
-    }
+    const response = await authService.getCurrentUser();
+    set({
+      user: response.data,
+      isAuthenticated: true,
+      isLoading: false,
+      error: null,
+      isInitialized: true,
+    });
   } catch (error) {
     set({
       user: null,
@@ -35,7 +24,6 @@ const initializeAuth = async (set) => {
       error: error.response?.data?.message || "Failed to initialize auth",
       isInitialized: true,
     });
-    localStorage.removeItem(StorageKeys.ACCESS_TOKEN);
   }
 };
 
@@ -110,8 +98,6 @@ const useAuthStore = create((set, get) => ({
         isLoading: false,
         error: error.response?.data?.message || "Logout failed",
       });
-
-      localStorage.removeItem(StorageKeys.ACCESS_TOKEN);
       set({
         user: null,
         isAuthenticated: false,

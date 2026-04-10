@@ -1,4 +1,3 @@
-import { StorageKeys } from "@/utils/constants";
 import axiosInstance from "./axios";
 
 const authService = {
@@ -10,27 +9,11 @@ const authService = {
   login: async (credentials) => {
     const response = await axiosInstance.post("/auth/login", credentials);
 
-    if (response.data.data.accessToken) {
-      localStorage.setItem(
-        StorageKeys.ACCESS_TOKEN,
-        response.data?.data?.accessToken,
-      );
-    }
-
-    if (response.data.data.refreshToken) {
-      localStorage.setItem(
-        StorageKeys.REFRESH_TOKEN,
-        response.data?.data?.refreshToken,
-      );
-    }
-
     return response.data;
   },
 
   logout: async () => {
     const response = await axiosInstance.post("/auth/logout");
-    localStorage.removeItem(StorageKeys.ACCESS_TOKEN);
-    localStorage.removeItem(StorageKeys.REFRESH_TOKEN);
 
     return response.data;
   },
@@ -85,32 +68,7 @@ const authService = {
   refreshAccessToken: async () => {
     const response = await axiosInstance.get("/auth/refreshAccessToken");
 
-    if (response.data?.data?.newAccessToken) {
-      localStorage.setItem(
-        StorageKeys.ACCESS_TOKEN,
-        response.data.data.newAccessToken,
-      );
-
-      // Update refresh token if a new one is provided
-      if (response.data?.data?.newRefreshToken) {
-        localStorage.setItem(
-          StorageKeys.REFRESH_TOKEN,
-          response.data.data.newRefreshToken,
-        );
-      }
-    }
-
     return response.data;
-  },
-
-  // Check if user is logged in
-  isLoggedIn: () => {
-    return !!localStorage.getItem(StorageKeys.ACCESS_TOKEN);
-  },
-
-  // Get access token
-  getAccessToken: () => {
-    return localStorage.getItem(StorageKeys.ACCESS_TOKEN);
   },
 };
 
