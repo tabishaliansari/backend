@@ -3,6 +3,7 @@ from fastapi import APIRouter, Request, Response
 from fastapi.params import Depends
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
+from urllib.parse import urlencode
 
 from app.db.database import get_db
 from app.schemas.user import UserRegister, UserResponse, UserLogin, EmailRequest, RefreshTokenResponse, EmailVerificationStatus, ForgotPasswordRequest, PasswordResetRequest, LoginResponse
@@ -551,6 +552,11 @@ async def github_oauth_initiate(
     # Generate state for CSRF protection
     state = secrets.token_urlsafe(32)
 
+    import os
+
+    print("FROM SETTINGS:", settings.GITHUB_CLIENT_ID)
+    print("FROM OS ENV:", os.getenv("GITHUB_CLIENT_ID"))
+
     # Construct GitHub OAuth URL
     github_auth_url = (
         f"https://github.com/login/oauth/authorize?"
@@ -576,11 +582,10 @@ async def github_oauth_initiate(
     return response
 
 
-@router.get("/github/callback", response_model=ApiResponse)
-@limiter.limit("1/minute")
+@router.get("/github/callback")
+# @limiter.limit("1/minute")
 async def github_oauth_callback(
     request: Request,
-    response: Response,
     code: str = None,
     state: str = None,
     db: Session = Depends(get_db),
@@ -595,85 +600,75 @@ async def github_oauth_callback(
     4. Resolves email (handles private emails)
     5. Handles 3 cases: existing GitHub user, existing local user (error), new user
     6. Generates JWT tokens and sets cookies
-    7. Returns user data
+    7. Redirects to frontend dashboard with cookies or to login with error on failure
 
     Args:
         request: FastAPI request object (for cookie access)
-        response: FastAPI Response object (for setting cookies)
         code: Authorization code from GitHub (query param)
         state: State token from GitHub (query param)
         db: Database session
 
     Returns:
-        ApiResponse 200 with:
-        - accessToken and refreshToken set as HTTP-only cookies
-        - User data in response body
-        - Success message
+        RedirectResponse to frontend dashboard with cookies on success
+        RedirectResponse to /auth?mode=login&error=ERROR_CODE on failure
 
     Raises:
-        ApiError(400): If code or state missing
-        ApiError(401): If state mismatch (CSRF attack)
-        ApiError(400): If GitHub OAuth exchange fails
-        ApiError(400): If account exists with email/password (OAUTH_ACCOUNT_EXISTS)
         ApiError(429): If rate limited
     """
-    # Step 1: Validate code and state parameters
-    if not code or not state:
-        raise ApiError(
-            statusCode=400,
-            message="Missing code or state parameter",
-            code=ErrorCodes.BAD_REQUEST,
+    try:
+        # Step 1: Validate code and state parameters
+        if not code or not state:
+            raise ApiError(
+                statusCode=400,
+                message="Missing code or state parameter",
+                code=ErrorCodes.BAD_REQUEST,
+            )
+
+        # Step 2: Validate state matches (CSRF protection)
+        oauth_state = request.cookies.get("oauth_state")
+        if not oauth_state or oauth_state != state:
+            raise ApiError(
+                statusCode=401,
+                message="State mismatch. Possible CSRF attack.",
+                code=ErrorCodes.INVALID_OAUTH_STATE,
+            )
+
+        # Step 3: Execute GitHub OAuth flow (exchange code, fetch user, handle creation/login)
+        user = await handle_github_oauth(db, code)
+
+        # Step 4: Generate tokens
+        access_token, refresh_token = create_github_oauth_tokens(user)
+        db.commit()  # Save refresh token to database
+
+        # Step 5: Create redirect response to frontend dashboard
+        redirect_response = RedirectResponse(url=f"{settings.CLIENT_URL}/dashboard", status_code=302)
+
+        # Step 6: Set tokens as HTTP-only cookies on the redirect response
+        redirect_response.set_cookie(
+            key="accessToken",
+            value=access_token,
+            httponly=True,
+            secure=False, # In production, ensure this is True to only send over HTTPS
+            samesite="Lax", # In production, set to 'None' if frontend is on different domain and ensure secure=True)
+            max_age=3600,  # 1 hour
         )
 
-    # Step 2: Validate state matches (CSRF protection)
-    oauth_state = request.cookies.get("oauth_state")
-    if not oauth_state or oauth_state != state:
-        raise ApiError(
-            statusCode=401,
-            message="State mismatch. Possible CSRF attack.",
-            code=ErrorCodes.INVALID_OAUTH_STATE,
+        redirect_response.set_cookie(
+            key="refreshToken",
+            value=refresh_token,
+            httponly=True,
+            secure=False, # In production, ensure this is True to only send over HTTPS
+            samesite="Lax", # In production, set to 'None' if frontend is on different domain and ensure secure=True)
+            max_age=604800,  # 7 days
         )
 
-    # Step 3: Clear oauth_state cookie
-    response.delete_cookie(key="oauth_state", httponly=True, secure=True, samesite="lax")
+        # Step 7: Delete oauth_state cookie on the redirect response
+        redirect_response.delete_cookie(key="oauth_state", httponly=True, secure=True, samesite="none")
 
-    # Step 4: Execute GitHub OAuth flow (exchange code, fetch user, handle creation/login)
-    user = await handle_github_oauth(db, code)
+        return redirect_response
 
-    # Step 5: Generate tokens
-    access_token, refresh_token = create_github_oauth_tokens(user)
-    db.commit()  # Save refresh token to database
-
-    # Step 6: Set tokens as HTTP-only cookies
-    response.set_cookie(
-        key="accessToken",
-        value=access_token,
-        httponly=True,
-        secure=True,
-        samesite="lax",
-        max_age=3600,  # 1 hour
-    )
-
-    response.set_cookie(
-        key="refreshToken",
-        value=refresh_token,
-        httponly=True,
-        secure=True,
-        samesite="lax",
-        max_age=604800,  # 7 days
-    )
-
-    # Step 7: Return user response
-    user_response = UserResponse.model_validate(user)
-
-    login_response = LoginResponse(
-        **user_response.model_dump(),
-        access_token=access_token,
-    )
-
-    return ApiResponse(
-        statusCode=200,
-        success=True,
-        message="GitHub login successful",
-        data=login_response,
-    )
+    except ApiError as e:
+        # On error, redirect to login with error code
+        error_code = e.code if hasattr(e, 'code') and e.code else "OAUTH_FAILED"
+        redirect_url = f"{settings.CLIENT_URL}/auth?mode=login&error={error_code}"
+        return RedirectResponse(url=redirect_url, status_code=302)

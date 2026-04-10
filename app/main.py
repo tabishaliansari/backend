@@ -8,6 +8,7 @@ from app.api.routes.health import router as health
 from app.api.routes.users import router as users
 from app.api.limiter import limiter
 from app.utils.api_error import register_exception_handlers
+from app.core.config import settings
 
 app = FastAPI(title="FastAPI Auth")
 
@@ -38,3 +39,13 @@ register_exception_handlers(app)
 @app.get("/")
 def root():
     return {"message": "FastAPI auth service is running"}
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    port = settings.PORT
+    host = "127.0.0.1"
+
+    print(f"🚀 Starting server on http://{host}:{port}")
+    uvicorn.run(app, host=host, port=port)

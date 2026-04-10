@@ -13,9 +13,10 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
     # Application Configuration
+    PORT: int = 4000
     ENVIRONMENT: str = "development"  # development, testing, production
     DEBUG: bool = False
-    BASE_URL: str = "http://localhost:8000"
+    BASE_URL: str = "http://localhost:4000"
     CLIENT_URL: str = "http://localhost:5173"
 
     # Email Configuration (SMTP)
