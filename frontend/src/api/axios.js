@@ -27,7 +27,7 @@ axiosInstance.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
     const requestUrl = originalRequest?.url || "";
-    const isAuthRequest = /\/auth\/(login|register|forgotPassword|resetPassword|verify-email|resend-verification-email)/.test(requestUrl);
+    const isAuthRequest = /\/auth\/(login|register|forgotPassword|resetPassword|verify-email|resend-verification-email|github|github\/callback)/.test(requestUrl);
 
     // 🔁 Handle token expiry
     if (error.response?.status === 401 && !originalRequest._retry && !isAuthRequest) {

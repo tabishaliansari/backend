@@ -1,7 +1,7 @@
 import secrets
 from fastapi import APIRouter, Request, Response
 from fastapi.params import Depends
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, JSONResponse
 from sqlalchemy.orm import Session
 from urllib.parse import urlencode
 
@@ -508,6 +508,7 @@ def reset_password_route(
 @limiter.limit("1/minute")
 async def github_oauth_initiate(
     request: Request,
+    redirect_to_provider: bool = True,
     db: Session = Depends(get_db),
 ):
     """
@@ -530,7 +531,10 @@ async def github_oauth_initiate(
         db: Database session (for validating token if present)
 
     Returns:
-        RedirectResponse to GitHub OAuth authorization endpoint
+        If redirect_to_provider=True:
+            RedirectResponse to GitHub OAuth authorization endpoint
+        If redirect_to_provider=False:
+            ApiResponse 200 with authorizationUrl while setting oauth_state cookie
 
     Raises:
         ApiError(401): If user already logged in (has valid accessToken)
@@ -560,6 +564,25 @@ async def github_oauth_initiate(
         f"scope=user:email&"
         f"state={state}"
     )
+
+    # If frontend requests non-redirect mode, return auth URL as JSON and let frontend navigate.
+    if not redirect_to_provider:
+        payload = ApiResponse(
+            statusCode=200,
+            success=True,
+            message="GitHub OAuth URL generated",
+            data={"authorizationUrl": github_auth_url},
+        ).model_dump(exclude_none=True)
+        response = JSONResponse(content=payload, status_code=200)
+        response.set_cookie(
+            key="oauth_state",
+            value=state,
+            httponly=True,
+            secure=True,
+            samesite="lax",
+            max_age=600,
+        )
+        return response
 
     # Create redirect response
     response = RedirectResponse(url=github_auth_url)

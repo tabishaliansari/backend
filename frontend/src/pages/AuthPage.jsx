@@ -102,6 +102,14 @@ function AuthPage() {
     setAuthMode(authMode === 'login' ? 'signup' : 'login')
   }
 
+  const handleGitHubLogin = async () => {
+    try {
+      await githubOAuthService.redirectToGitHub()
+    } catch (err) {
+      // Errors are already surfaced by the axios interceptor toast handler.
+    }
+  }
+
   return (
     <div className="min-h-screen bg-linear-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-4">
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-8 w-full max-w-md">
@@ -182,7 +190,7 @@ function AuthPage() {
 
             <button
               type="button"
-              onClick={() => githubOAuthService.redirectToGitHub()}
+              onClick={handleGitHubLogin}
               className="w-full flex items-center justify-center gap-2 bg-gray-800 hover:bg-gray-900 dark:bg-gray-700 dark:hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
             >
               <img src={gitHubLogo} alt="GitHub" className="w-5 h-5" />
