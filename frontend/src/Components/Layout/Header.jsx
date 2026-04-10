@@ -15,6 +15,7 @@ import useAuthStore from '@/store/authStore'
 import { useThemeStore } from '@/store'
 
 const getDisplayName = (user) => user?.firstName || user?.username || 'User'
+const DEFAULT_AVATAR_URL = 'https://placehold.co/600x400'
 
 const getAvatarFallback = (user) => {
   const name = getDisplayName(user)
@@ -37,7 +38,8 @@ function AppHeader() {
   const [themeSubmenuOpen, setThemeSubmenuOpen] = useState(false)
   const menuRootRef = useRef(null)
 
-  const avatarUrl = user?.avatar?.url || null
+  const avatarUrl = user?.avatar?.url || DEFAULT_AVATAR_URL
+  console.log(avatarUrl);
   const displayName = useMemo(() => getDisplayName(user), [user])
   const themeOptions = [
     { value: 'light', label: 'Light', icon: Sun },
@@ -148,17 +150,16 @@ function AppHeader() {
       <div className={`${compact ? 'mt-4' : 'mt-5'} flex justify-center`}>
         <div className="relative w-fit">
           <div className="relative">
-            {avatarUrl ? (
-              <img
-                src={avatarUrl}
-                alt={displayName}
-                className={`${compact ? 'h-28 w-28' : 'h-32 w-32'} rounded-full object-cover ring-4 ring-blue-500/40`}
-              />
-            ) : (
-              <div className={`${compact ? 'h-28 w-28' : 'h-32 w-32'} rounded-full bg-blue-600 text-white flex items-center justify-center text-3xl font-semibold ring-4 ring-blue-500/40`}>
-                {getAvatarFallback(user)}
-              </div>
-            )}
+            <img
+              src={avatarUrl}
+              alt={displayName}
+              onError={(event) => {
+                if (event.currentTarget.src !== DEFAULT_AVATAR_URL) {
+                  event.currentTarget.src = DEFAULT_AVATAR_URL
+                }
+              }}
+              className={`${compact ? 'h-28 w-28' : 'h-32 w-32'} rounded-full object-cover ring-4 ring-blue-500/40`}
+            />
 
             <button
               type="button"
@@ -295,17 +296,16 @@ function AppHeader() {
               aria-haspopup="menu"
               aria-expanded={userMenuOpen}
             >
-              {avatarUrl ? (
-                <img
-                  src={avatarUrl}
-                  alt={displayName}
-                  className="h-10 w-10 rounded-full object-cover ring-2 ring-blue-100 dark:ring-blue-900"
-                />
-              ) : (
-                <div className="h-10 w-10 rounded-full bg-blue-600 text-white flex items-center justify-center text-sm font-semibold ring-2 ring-blue-100 dark:ring-blue-900">
-                  {getAvatarFallback(user)}
-                </div>
-              )}
+              <img
+                src={avatarUrl}
+                alt={displayName}
+                onError={(event) => {
+                  if (event.currentTarget.src !== DEFAULT_AVATAR_URL) {
+                    event.currentTarget.src = DEFAULT_AVATAR_URL
+                  }
+                }}
+                className="h-10 w-10 rounded-full object-cover ring-2 ring-blue-100 dark:ring-blue-900"
+              />
 
               <ChevronDown className="h-4 w-4 text-gray-500 dark:text-gray-400" />
             </button>
@@ -338,17 +338,16 @@ function AppHeader() {
             className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300"
             aria-label="Account menu"
           >
-            {avatarUrl ? (
-              <img
-                src={avatarUrl}
-                alt={displayName}
-                className="h-6 w-6 rounded-full object-cover"
-              />
-            ) : (
-              <div className="h-6 w-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-semibold">
-                {getAvatarFallback(user)}
-              </div>
-            )}
+            <img
+              src={avatarUrl}
+              alt={displayName}
+              onError={(event) => {
+                if (event.currentTarget.src !== DEFAULT_AVATAR_URL) {
+                  event.currentTarget.src = DEFAULT_AVATAR_URL
+                }
+              }}
+              className="h-6 w-6 rounded-full object-cover"
+            />
           </button>
 
         </div>

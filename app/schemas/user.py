@@ -1,6 +1,7 @@
 from pydantic import BaseModel, EmailStr, Field, ConfigDict
 from typing import Optional
 from uuid import UUID
+from datetime import datetime
 from fastapi import UploadFile
 from app.core.config import settings
 
@@ -127,6 +128,9 @@ class UserResponse(BaseModel):
     username: str
     email: EmailStr
     role: str
+    avatar: dict
+    created_at: datetime
+    updated_at: datetime
 
     class Config:
         from_attributes = True
@@ -136,7 +140,13 @@ class UserResponse(BaseModel):
                 "fullname": "John Doe",
                 "username": "johndoe",
                 "email": "john@example.com",
-                "role": "user"
+                "role": "user",
+                "avatar": {
+                    "url": "https://placehold.co/600x400",
+                    "public_id": ""
+                },
+                "created_at": "2026-04-11T01:30:00Z",
+                "updated_at": "2026-04-11T01:30:00Z"
             }
         }
 
