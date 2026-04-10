@@ -41,9 +41,11 @@ axiosInstance.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
+    const requestUrl = originalRequest?.url || "";
+    const isAuthRequest = /\/auth\/(login|register|forgotPassword|resetPassword|verify-email|resend-verification-email)/.test(requestUrl);
 
     // 🔁 Handle token expiry
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (error.response?.status === 401 && !originalRequest._retry && !isAuthRequest) {
       originalRequest._retry = true;
 
       try {
@@ -56,7 +58,7 @@ axiosInstance.interceptors.response.use(
             // style: getToastStyles("error"),
           });
 
-          navigateTo("/login");
+          navigateTo("/auth?mode=login");
           return Promise.reject(error);
         }
 
@@ -90,8 +92,8 @@ axiosInstance.interceptors.response.use(
           // style: getToastStyles("error"),
         });
 
-        if (!window.location.pathname.includes("/login")) {
-          navigateTo("/login");
+        if (!window.location.pathname.includes("/auth")) {
+          navigateTo("/auth?mode=login");
         }
 
         return Promise.reject(error);

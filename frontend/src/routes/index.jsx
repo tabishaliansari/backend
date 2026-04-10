@@ -44,6 +44,10 @@ const router = createBrowserRouter([
         element: <AuthPage />,
       },
       {
+        path: 'login',
+        element: <Navigate to="/auth?mode=login" replace />,
+      },
+      {
         path: 'auth/verify',
         element: <VerifyEmailPage />,
       },
