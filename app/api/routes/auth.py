@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from urllib.parse import urlencode
 
 from app.db.database import get_db
-from app.schemas.user import UserRegister, UserResponse, UserLogin, EmailRequest, RefreshTokenResponse, EmailVerificationStatus, ForgotPasswordRequest, PasswordResetRequest, LoginResponse
+from app.schemas.user import UserRegister, UserResponse, UserLogin, EmailRequest, RefreshTokenResponse, EmailVerificationStatus, ForgotPasswordRequest, PasswordResetRequest
 from app.schemas.response import ApiResponse
 from app.services.auth_service import register_user, login_user, logout_user, verify_email, resend_verification_email, refresh_access_token, forgot_password_request, reset_password
 from app.services.github_oauth_service import handle_github_oauth, create_github_oauth_tokens
@@ -142,17 +142,12 @@ def login(
     # Convert User model to UserResponse schema (validates and serializes)
     user_response = UserResponse.model_validate(user)
 
-    login_response = LoginResponse(
-        **user_response.model_dump(),  
-        access_token=access_token
-    )
-
     # Return ApiResponse with UserResponse data
     return ApiResponse(
         statusCode=200,
         success=True,
         message="Login successful",
-        data=login_response,
+        data=user_response,
     )
 
 

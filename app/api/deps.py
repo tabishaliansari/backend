@@ -11,7 +11,6 @@ injection system.
 from uuid import UUID
 from fastapi import Depends, Request
 from sqlalchemy.orm import Session
-from fastapi.security import OAuth2PasswordBearer
 
 from app.db.database import get_db
 from app.core.security import decode_token
@@ -20,76 +19,60 @@ from app.models.user import User
 from app.utils.api_error import ApiError
 from app.core.error_codes import ErrorCodes
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login", auto_error=False)
 
-
-def get_token(request: Request, token: str | None = Depends(oauth2_scheme)) -> str:
+def get_token(request: Request) -> str:
     """
-    Extract access token from either cookies or Authorization header.
+    Extract access token from cookies.
 
-    Priority:
-    1. Cookies (browser)
-    2. Authorization header (Bearer token)
+    Args:
+        request: FastAPI Request object
+
+    Returns:
+        Access token string
+
+    Raises:
+        ApiError(401): If token missing or invalid
     """
+    # Extract token from cookies
+    token = request.cookies.get("accessToken")
+    if not token:
+        raise ApiError(
+            statusCode=401,
+            message="Access token missing. Please log in.",
+            code=ErrorCodes.USER_NOT_LOGGED_IN,
+        )
 
-    # 1️⃣ Try cookie first (primary for web)
-    cookie_token = request.cookies.get("accessToken")
-    if cookie_token:
-        return cookie_token
-
-    # 2️⃣ Fallback to Authorization header
-    if token:
-        return token
-
-    # 3️⃣ No token found
-    raise ApiError(
-        statusCode=401,
-        message="Access token missing. Please log in.",
-        code=ErrorCodes.USER_NOT_LOGGED_IN,
-    )
+    return token
 
 
 def get_current_user(request: Request, db: Session = Depends(get_db), token: str = Depends(get_token)) -> User:
     """
     FastAPI dependency to get the currently authenticated user.
 
-    Replicates Express middleware behavior of "isLoggedIn" - validates the
-    JWT token from cookies and returns the authenticated user object.
+    Validates the JWT token from cookies and returns the authenticated user.
 
     Flow:
     1. Extract `accessToken` from cookies
-    2. Validate token exists
-    3. Decode JWT token
-    4. Validate token is valid (not expired, valid signature)
-    5. Extract user ID from token payload ("sub" claim)
-    6. Fetch user from database
-    7. Validate user exists
-    8. Return authenticated user
+    2. Decode JWT token
+    3. Extract user ID from token payload ("sub" claim)
+    4. Fetch user from database
+    5. Return authenticated user
 
     Args:
         request: FastAPI Request object
-        db: Database session (FastAPI injected via Depends)
+        db: Database session
+        token: Access token from cookies
 
     Returns:
         User object of authenticated user
 
     Raises:
-        ApiError(401): If token missing, invalid, expired, or user not found
+        ApiError(401): If token invalid, expired, or user not found
 
     Usage in routes:
         @router.get("/profile")
         def get_profile(current_user: User = Depends(get_current_user)):
             return {"username": current_user.username}
-    
-    
-    Hybrid authentication dependency:
-    Supports both cookie-based and Bearer token authentication.
-
-    Flow:
-    1. Extract token (cookie or header)
-    2. Decode JWT
-    3. Validate payload
-    4. Fetch user from DB
     """
 
     # Step 1: Decode and validate token
@@ -144,7 +127,7 @@ def get_current_admin(current_user: User = Depends(get_current_user)) -> User:
     Validates that the authenticated user has admin role.
 
     Args:
-        current_user: Authenticated user (FastAPI injected via Depends)
+        current_user: Authenticated user
 
     Returns:
         User object if user is admin
@@ -166,4 +149,3 @@ def get_current_admin(current_user: User = Depends(get_current_user)) -> User:
         )
 
     return current_user
-
