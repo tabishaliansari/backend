@@ -1,7 +1,7 @@
 """Utility functions for error handling and formatting."""
 
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 
 def should_include_stack_trace() -> bool:
@@ -46,40 +46,6 @@ def extract_error_message(error: Exception) -> str:
     return error_str if error_str else "An error occurred"
 
 
-def serialize_error_response(
-    error, include_stack: bool = False
-) -> Dict[str, Any]:
-    """
-    Format an ApiError as a dictionary for JSON response serialization.
-
-    Args:
-        error: The ApiError to serialize
-        include_stack: Whether to include stack trace in the response
-
-    Returns:
-        dict: Formatted error response dictionary
-    """
-    response = {
-        "statusCode": error.statusCode,
-        "success": error.success,
-        "message": error.message,
-    }
-
-    # Add error code if present
-    if error.code:
-        response["code"] = error.code
-
-    # Add detailed error list if present
-    if error.errors:
-        response["errors"] = error.errors
-
-    # Add stack trace if requested and available
-    if include_stack and error.stack:
-        response["stack"] = error.stack
-
-    return response
-
-
 def format_validation_errors(
     errors: list[Dict[str, Any]],
 ) -> list[Dict[str, Any]]:
@@ -95,6 +61,11 @@ def format_validation_errors(
     formatted = []
     for error in errors:
         if isinstance(error, dict):
-            formatted.append({"field": error.get("loc", ["unknown"])[0], "detail": error.get("msg", "Invalid value")})
+            formatted.append(
+                {
+                    "field": ".".join(map(str, error.get("loc", []))),
+                    "detail": error.get("msg", "Invalid value"),
+                }
+            )
     return formatted
 

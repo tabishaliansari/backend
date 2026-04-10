@@ -7,6 +7,7 @@ Mirrors Express.js error handling patterns.
 """
 
 import traceback
+import logging
 from typing import Any, List, Optional
 
 from fastapi import Request
@@ -15,8 +16,10 @@ from fastapi.exceptions import RequestValidationError
 from slowapi.errors import RateLimitExceeded
 
 from app.core.error_codes import ErrorCodes
-from app.utils.error_utils import should_include_stack_trace, serialize_error_response, format_validation_errors
+from app.utils.error_utils import should_include_stack_trace, format_validation_errors
 from app.schemas.response import ApiResponse
+
+logger = logging.getLogger(__name__)
 
 
 class ApiError(Exception):
@@ -25,7 +28,7 @@ class ApiError(Exception):
 
     Mirrors Express.js ApiError pattern for consistent error handling across
     the application. Includes status code, human-readable message, machine-readable
-    error code, detailed error list, and stack trace information.
+    error code and detailed error list.
 
     Attributes:
         statusCode (int): HTTP status code for the error response
@@ -33,7 +36,6 @@ class ApiError(Exception):
         success (bool): Always False for error instances
         code (str, optional): Machine-readable error code (e.g., 'USER_ALREADY_EXISTS')
         errors (List[Any], optional): List of detailed error objects for validation errors
-        stack (str, optional): Stack trace for debugging in development environments
     """
 
     def __init__(
@@ -64,10 +66,8 @@ class ApiError(Exception):
         self.statusCode = statusCode
         self.message = message
         self.success = False
-        self.code = code
+        self.code = code or ErrorCodes.INTERNAL_SERVER_ERROR
         self.errors = errors or []
-        # Capture stack trace automatically
-        self.stack = traceback.format_exc()
 
     def __repr__(self) -> str:
         return (
@@ -95,8 +95,8 @@ class ApiError(Exception):
         if self.errors:
             error_dict["errors"] = self.errors
 
-        if include_stack and self.stack:
-            error_dict["stack"] = self.stack
+        if include_stack:
+            error_dict["stack"] = "".join(traceback.format_stack())
 
         return error_dict
 
@@ -110,9 +110,13 @@ async def api_error_handler(request: Request, exc: ApiError) -> JSONResponse:
 
     Converts ApiError exceptions to standardized JSON response format with
     optional stack trace inclusion based on environment configuration.
+    Uses proper log levels: ERROR for 5xx, WARNING for 4xx and lower.
     """
+    if exc.statusCode >= 500:
+        logger.error(f"[{exc.statusCode}] {exc.code}: {str(exc)}", exc_info=True)
+    else:
+        logger.warning(f"[{exc.statusCode}] {exc.code}: {str(exc)}")
     include_stack = should_include_stack_trace()
-    error_data = serialize_error_response(exc, include_stack=include_stack)
 
     response = ApiResponse(
         statusCode=exc.statusCode,
@@ -120,7 +124,7 @@ async def api_error_handler(request: Request, exc: ApiError) -> JSONResponse:
         message=exc.message,
         code=exc.code,
         errors=exc.errors if exc.errors else None,
-        stack=error_data.get("stack"),
+        stack="".join(traceback.format_stack()) if include_stack else None,
     )
 
     return JSONResponse(
@@ -135,9 +139,11 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
     Formats validation errors with standardized error response structure
     and provides detailed error information to the client.
+    Logs as WARNING since these are client-side validation failures (422).
     """
     # Extract validation errors from Pydantic
     validation_errors = format_validation_errors(exc.errors())
+    logger.warning(f"[422] VALIDATION_ERROR: Request validation failed - {exc.errors()}")
 
     error = ApiError(
         statusCode=422,
@@ -147,7 +153,6 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     )
 
     include_stack = should_include_stack_trace()
-    error_data = serialize_error_response(error, include_stack=include_stack)
 
     response = ApiResponse(
         statusCode=error.statusCode,
@@ -155,7 +160,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         message=error.message,
         code=error.code,
         errors=error.errors,
-        stack=error_data.get("stack"),
+        stack="".join(traceback.format_stack()) if include_stack else None,
     )
 
     return JSONResponse(
@@ -170,22 +175,24 @@ async def general_exception_handler(request: Request, exc: Exception) -> JSONRes
 
     Handles any exception that doesn't match specific handlers and returns
     a generic error response without exposing implementation details in production.
+    Logs as ERROR with full traceback since these are server-side failures (500).
     """
+    logger.error(f"[500] INTERNAL_SERVER_ERROR: {str(exc)}", exc_info=True)
+    include_stack = should_include_stack_trace()
+    message = str(exc) if include_stack else "An internal error occurred. Please try again later."
+
     error = ApiError(
         statusCode=500,
-        message="An internal error occurred. Please try again later.",
+        message=message,
         code=ErrorCodes.INTERNAL_SERVER_ERROR,
     )
-
-    include_stack = should_include_stack_trace()
-    error_data = serialize_error_response(error, include_stack=include_stack)
 
     response = ApiResponse(
         statusCode=error.statusCode,
         success=error.success,
         message=error.message,
         code=error.code,
-        stack=error_data.get("stack"),
+        stack="".join(traceback.format_stack()) if include_stack else None,
     )
 
     return JSONResponse(
