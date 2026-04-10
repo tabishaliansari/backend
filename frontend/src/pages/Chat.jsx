@@ -52,7 +52,7 @@ function Chat() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
+    <div className="flex h-full min-h-0 flex-col bg-gray-50 dark:bg-gray-900">
       {/* Page Header */}
       <div className="border-b border-gray-200 dark:border-gray-700 px-6 py-4">
         <button
