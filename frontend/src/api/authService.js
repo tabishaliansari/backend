@@ -19,7 +19,7 @@ const authService = {
   },
 
   getCurrentUser: async () => {
-    const response = await axiosInstance.get("/users/profile");
+    const response = await axiosInstance.get("/users/me/profile");
 
     return response.data;
   },

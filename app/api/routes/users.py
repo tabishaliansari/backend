@@ -24,7 +24,7 @@ from app.core.config import settings
 router = APIRouter(prefix="/users", tags=["Users"])
 
 
-@router.get("/profile", response_model=ApiResponse)
+@router.get("/me/profile", response_model=ApiResponse)
 def get_profile(
     current_user: User = Depends(get_current_user),
 ):
@@ -56,7 +56,7 @@ def get_profile(
     )
 
 
-@router.get("/{user_id}", response_model=ApiResponse)
+@router.get("/admin/{user_id}", response_model=ApiResponse)
 def get_user_profile(
     user_id: UUID,
     admin_user: User = Depends(get_current_admin),
@@ -106,7 +106,7 @@ def get_user_profile(
     )
 
 
-@router.post("/updateProfile", response_model=ApiResponse)
+@router.patch("/me/profile", response_model=ApiResponse)
 @limiter.limit("5/minute")
 def update_profile(
     request: Request,
@@ -164,7 +164,7 @@ def update_profile(
     )
 
 
-@router.patch("/{user_id}", response_model=ApiResponse)
+@router.patch("/admin/{user_id}", response_model=ApiResponse)
 @limiter.limit("5/minute")
 def update_user(
     request: Request,
@@ -236,7 +236,7 @@ def update_user(
     )
 
 
-@router.patch("/updateAvatar", response_model=ApiResponse)
+@router.patch("/me/avatar", response_model=ApiResponse)
 @limiter.limit("5/minute")
 async def update_avatar(
     request: Request,

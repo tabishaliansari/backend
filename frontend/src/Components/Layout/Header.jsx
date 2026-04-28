@@ -13,6 +13,7 @@ import {
 import { toast } from 'sonner'
 import useAuthStore from '@/store/authStore'
 import { useThemeStore } from '@/store'
+import AvatarUploadModal from '../Common/Modals/AvatarUploadModal'
 
 const getDisplayName = (user) => user?.firstName || user?.username || 'User'
 const DEFAULT_AVATAR_URL = 'https://placehold.co/600x400'
@@ -86,8 +87,10 @@ function AppHeader() {
     setThemeSubmenuOpen(false)
   }
 
+  const [avatarModalOpen, setAvatarModalOpen] = useState(false)
+
   const handleChangeAvatar = () => {
-    toast.info('Change avatar coming soon')
+    setAvatarModalOpen(true)
   }
 
   const handleManageAccount = () => {
@@ -408,6 +411,12 @@ function AppHeader() {
           )}
         </div>
       )}
+      <AvatarUploadModal
+        open={avatarModalOpen}
+        onClose={() => setAvatarModalOpen(false)}
+        avatarUrl={avatarUrl}
+        displayName={displayName}
+      />
     </header>
   )
 }
