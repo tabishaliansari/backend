@@ -1,12 +1,13 @@
 from uuid import uuid4
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import Boolean, DateTime
 from sqlalchemy.sql import func
 from datetime import datetime
 from sqlalchemy import JSON
 from app.db.database import Base
 from sqlalchemy import Enum
+from typing import List
 import enum
 
 class UserRole(enum.Enum):
@@ -50,3 +51,10 @@ class User(Base):
 
     created_at: Mapped[datetime] = mapped_column(default=func.now())
     updated_at: Mapped[datetime] = mapped_column(default=func.now(), onupdate=func.now())
+
+    # Relationships
+    chat_sessions: Mapped[List["ChatSession"]] = relationship(
+        "ChatSession",
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )
