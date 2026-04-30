@@ -19,13 +19,7 @@ class ChatSession(Base):
     title: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[datetime] = mapped_column(default=func.now())
 
-    # Relationships
-    user: Mapped["User"] = relationship(
-        "User",
-        back_populates="chat_sessions"
-    )
-
-    # Bidirectional relationships
+    # relationships
     messages: Mapped[List["ChatMessage"]] = relationship(
         "ChatMessage",
         back_populates="session",

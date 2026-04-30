@@ -51,10 +51,3 @@ class User(Base):
 
     created_at: Mapped[datetime] = mapped_column(default=func.now())
     updated_at: Mapped[datetime] = mapped_column(default=func.now(), onupdate=func.now())
-
-    # Relationships
-    chat_sessions: Mapped[List["ChatSession"]] = relationship(
-        "ChatSession",
-        back_populates="user",
-        cascade="all, delete-orphan"
-    )

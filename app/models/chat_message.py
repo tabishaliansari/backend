@@ -23,9 +23,3 @@ class ChatMessage(Base):
     role: Mapped[MessageRole] = mapped_column(Enum(MessageRole), nullable=False)
     content: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[datetime] = mapped_column(default=func.now())
-
-    # Bidirectional relationship
-    session: Mapped["ChatSession"] = relationship(
-        "ChatSession",
-        back_populates="messages"
-    )
