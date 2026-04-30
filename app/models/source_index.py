@@ -9,14 +9,24 @@ from app.db.database import Base
 class SourceIndex(Base):
     __tablename__ = "source_indexes"
 
-    id:              Mapped[UUID]     = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    source_id:       Mapped[UUID]     = mapped_column(ForeignKey("sources.id", ondelete="CASCADE"), unique=True, nullable=False)
-    collection_name: Mapped[str]      = mapped_column(String, nullable=False)
-    provider:        Mapped[str]      = mapped_column(String, default="qdrant")
+    id:        Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    source_id: Mapped[UUID] = mapped_column(ForeignKey("sources.id", ondelete="CASCADE"), unique=True, nullable=False)
+
+    # Vector (Qdrant)
+    collection_name:  Mapped[str]            = mapped_column(String, nullable=False)
+    vector_indexed:   Mapped[bool]           = mapped_column(default=False)
+    vector_indexed_at: Mapped[datetime|None] = mapped_column(nullable=True)
+
+    # Graph (Neo4j)
+    graph_indexed:    Mapped[bool]           = mapped_column(default=False)
+    graph_indexed_at: Mapped[datetime|None]  = mapped_column(nullable=True)
+    entity_count:     Mapped[int|None]       = mapped_column(Integer, nullable=True)
+    relation_count:   Mapped[int|None]       = mapped_column(Integer, nullable=True)
+
+    # Shared config
+    provider:        Mapped[str]      = mapped_column(String, default="qdrant+neo4j")
     embedding_model: Mapped[str]      = mapped_column(String, default="text-embedding-3-small")
     chunk_size:      Mapped[int]      = mapped_column(Integer, default=1000)
     chunk_overlap:   Mapped[int]      = mapped_column(Integer, default=200)
-    indexed_at:      Mapped[datetime] = mapped_column(default=func.now())
 
-    # Bidirectional — indexing service starts from source, retrieval starts from index
     source: Mapped["Source"] = relationship("Source", back_populates="source_index")
