@@ -6,6 +6,8 @@ from app.db import base
 from app.api.routes.auth import router as auth
 from app.api.routes.health import router as health
 from app.api.routes.users import router as users
+from app.api.routes.sessions import router as sessions
+from app.api.routes.sources import router as sources
 from app.api.limiter import limiter
 from app.utils.api_error import register_exception_handlers
 from app.core.config import settings
@@ -29,6 +31,8 @@ app.add_middleware(
 app.include_router(health)
 app.include_router(auth)
 app.include_router(users)
+app.include_router(sessions)
+app.include_router(sources)
 
 app.state.limiter = limiter
 
