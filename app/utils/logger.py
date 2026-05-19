@@ -22,6 +22,17 @@ class UvicornStyleFormatter(logging.Formatter):
         self.use_colors = use_colors
 
     def format(self, record):
+        if (
+            getattr(record, "args", None)
+            and isinstance(record.args, tuple)
+            and len(record.args) >= 5
+            and not hasattr(record, "client_addr")
+        ):
+            client_addr, method, path, http_version, status_code = record.args[:5]
+            record.client_addr = client_addr
+            record.request_line = f"{method} {path} HTTP/{http_version}"
+            record.status_code = status_code
+
         orig_levelname = record.levelname
         
         # 1. Format levelname with trailing colon and pad to 9 chars
