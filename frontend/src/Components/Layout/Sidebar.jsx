@@ -186,6 +186,14 @@ function Sidebar() {
     closeModals()
   }
 
+  const handleLogoClick = () => {
+    if (user && user.id) {
+      navigate('/dashboard')
+    } else {
+      navigate('/landing')
+    }
+  }
+
   const isDark = resolvedTheme === 'dark'
   const sidebarWidth = isCollapsed ? 'w-[56px]' : 'w-[240px]'
 
@@ -200,14 +208,18 @@ function Sidebar() {
           <button
             onMouseEnter={() => setTopLogoHovered(true)}
             onMouseLeave={() => setTopLogoHovered(false)}
-            onClick={() => setIsCollapsed(false)}
+            onClick={() => {
+              setIsCollapsed(false)
+              setTopLogoHovered(false)
+            }}
             className="w-9 h-9 flex items-center justify-center rounded hover:bg-(--bg-hover) text-(--text-muted) hover:text-(--text-primary) transition-colors mx-auto"
+            title="Expand Sidebar"
           >
             {topLogoHovered ? <PanelLeftOpen className="w-4 h-4" /> : <GraphLMLogo variant="icon" height={22} />}
           </button>
         ) : (
           <>
-            <div className="flex items-center gap-2 ml-1">
+            <div className="flex items-center gap-2 ml-1 cursor-pointer hover:opacity-80 transition-opacity" onClick={handleLogoClick} title="Go to Dashboard">
               <GraphLMLogo variant="full" height={22} />
             </div>
             <button

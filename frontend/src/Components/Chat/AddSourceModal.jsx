@@ -148,7 +148,7 @@ export default function AddSourceModal({ isOpen, onClose, currentSession }) {
         </div>
 
         {/* ── Content ── */}
-        <div className="p-5 bg-(--bg-elevated) min-h-[280px] flex flex-col">
+        <div className="p-5 bg-(--bg-elevated) min-h-70 flex flex-col">
 
           {/* TAB: UPLOAD */}
           {activeTab === 'upload' && (
@@ -293,7 +293,7 @@ export default function AddSourceModal({ isOpen, onClose, currentSession }) {
                   <p className="text-xs text-(--text-muted) max-w-xs">Upload a document or connect a repo first.</p>
                 </div>
               ) : (
-                <div className="overflow-y-auto space-y-1.5 max-h-[320px] pr-1">
+                <div className="overflow-y-auto space-y-1.5 max-h-80 pr-1">
                   {sources.map(source => {
                     const isAttached = currentSession?.sources?.some(s => s.id === source.id);
                     return (

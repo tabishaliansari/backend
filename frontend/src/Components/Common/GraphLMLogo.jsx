@@ -9,6 +9,7 @@
  *  className – extra Tailwind classes
  *  forceDark – override to always use the dark-background variant
  *  forceLight – override to always use the light-background variant
+ *  onClick   – optional click handler
  */
 import { useThemeStore } from '@/store'
 
@@ -18,6 +19,7 @@ export default function GraphLMLogo({
   className = '',
   forceDark = false,
   forceLight = false,
+  onClick,
 }) {
   const resolvedTheme = useThemeStore(s => s.resolvedTheme)
 
@@ -30,9 +32,10 @@ export default function GraphLMLogo({
         src="/logo/graphlm-icon.svg"
         alt="GraphLM"
         height={h}
-        style={{ height: h, width: 'auto', display: 'block' }}
+        style={{ height: h, width: 'auto', display: 'block', cursor: onClick ? 'pointer' : 'default' }}
         className={className}
         draggable={false}
+        onClick={onClick}
       />
     )
   }
@@ -48,9 +51,10 @@ export default function GraphLMLogo({
       src={src}
       alt="GraphLM"
       height={h}
-      style={{ height: h, width: 'auto', display: 'block' }}
+      style={{ height: h, width: 'auto', display: 'block', cursor: onClick ? 'pointer' : 'default' }}
       className={className}
       draggable={false}
+      onClick={onClick}
     />
   )
 }
