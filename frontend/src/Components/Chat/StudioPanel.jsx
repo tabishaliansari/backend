@@ -1,5 +1,15 @@
-import { useState } from 'react'
-import { LayoutTemplate, ChevronRight, PanelRightClose } from 'lucide-react'
+import { useState, useMemo } from 'react'
+import {
+  LayoutTemplate,
+  ChevronRight,
+  PanelRightClose,
+  X,
+  Sparkles,
+  BookOpen,
+  Cpu,
+  AlertTriangle,
+  Play
+} from 'lucide-react'
 import { useChatStore } from '@/store'
 import { CanvasHome } from './Canvas/CanvasHome'
 import { GraphView } from './Canvas/GraphView'
@@ -10,32 +20,40 @@ const TOOL_LABELS = {
   docs: 'Docs',
 }
 
-function CanvasPanel({ onCollapse, currentSession, selectedSources = [], onActiveToolChange }) {
-  const [activeTool, setActiveTool] = useState(null) // null = home
+function CanvasPanel({ 
+  onCollapse, 
+  currentSession, 
+  selectedSources = [], 
+  onActiveToolChange,
+  activeTool,
+  onOpenDocsConfig,
+  isGenerating,
+  generationProgress,
+  generationStatus,
+  docRefreshTrigger,
+  onDocDeleted
+}) {
   const { graphData, subgraphMode, setSubgraphMode } = useChatStore()
 
   // Disable sync mode whenever the user leaves Graph View
   const handleBack = () => {
     if (activeTool === 'graph') setSubgraphMode(false)
-    setActiveTool(null)
     onActiveToolChange?.(null)
   }
 
   const handleSelectTool = (toolId) => {
     if (activeTool === 'graph' && toolId !== 'graph') setSubgraphMode(false)
-    setActiveTool(toolId)
     onActiveToolChange?.(toolId)
   }
 
   const handleCollapse = () => {
     setSubgraphMode(false)
-    setActiveTool(null)
     onActiveToolChange?.(null)
     onCollapse()
   }
 
   return (
-    <div className="flex flex-col h-full bg-(--bg-surface) text-(--text-primary) border-l border-(--border-subtle)">
+    <div className="flex flex-col h-full bg-(--bg-surface) text-(--text-primary) border-l border-(--border-subtle) relative">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-(--border-subtle) shrink-0">
         {/* Breadcrumb */}
@@ -74,7 +92,16 @@ function CanvasPanel({ onCollapse, currentSession, selectedSources = [], onActiv
       {/* Content */}
       <div className="flex-1 min-h-0 overflow-y-auto">
         {activeTool === null && (
-          <CanvasHome onSelectTool={handleSelectTool} selectedSources={selectedSources} />
+          <CanvasHome
+            onSelectTool={handleSelectTool}
+            selectedSources={selectedSources}
+            currentSession={currentSession}
+            onOpenDocsConfig={onOpenDocsConfig}
+            isGenerating={isGenerating}
+            generationProgress={generationProgress}
+            generationStatus={generationStatus}
+            docRefreshTrigger={docRefreshTrigger}
+          />
         )}
         {activeTool === 'graph' && (
           <GraphView
@@ -86,7 +113,13 @@ function CanvasPanel({ onCollapse, currentSession, selectedSources = [], onActiv
           />
         )}
         {activeTool === 'docs' && (
-          <DocsView />
+          <DocsView
+            currentSession={currentSession}
+            selectedSources={selectedSources}
+            onRequestRegen={() => onOpenDocsConfig?.(true)}
+            onDocDeleted={onDocDeleted}
+            docRefreshTrigger={docRefreshTrigger}
+          />
         )}
       </div>
     </div>

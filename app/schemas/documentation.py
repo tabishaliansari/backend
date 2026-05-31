@@ -66,6 +66,10 @@ class DocGenerationConfig(BaseModel):
 
 class StartDocGenRequest(BaseModel):
     config: DocGenerationConfig = Field(default_factory=DocGenerationConfig)
+    source_id: Optional[UUID] = Field(
+        default=None,
+        description="Optional source ID. If provided, documentation will be generated for this specific source."
+    )
     reuse_from_doc_gen_id: Optional[UUID] = Field(
         default=None,
         description=(

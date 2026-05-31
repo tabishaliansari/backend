@@ -27,6 +27,7 @@ SSE transport:
 
 import asyncio
 from uuid import UUID
+from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from sqlalchemy.orm import Session
@@ -107,31 +108,45 @@ async def start_doc_generation(
     if str(session.user_id) != str(current_user.id):
         raise ApiError(403, "You do not have permission to access this session")
 
-    # ── 2. Verify exactly 1 source ─────────────────────────────────────────
+    # ── 2. Verify source ───────────────────────────────────────────────────
     sources = source_repo.get_sources_by_session(db, session_id)
-    if len(sources) == 0:
-        raise ApiError(
-            400,
-            "Documentation generation requires exactly 1 GitHub source attached to this session. "
-            "No sources are currently attached."
-        )
-    if len(sources) > 1:
-        raise ApiError(
-            400,
-            f"Documentation generation requires exactly 1 source. "
-            f"This session has {len(sources)} sources attached. "
-            "Please detach all but one GitHub repository and try again."
-        )
+    source_id = getattr(body, "source_id", None)
+    source = None
 
-    source = sources[0]
+    if source_id:
+        for s in sources:
+            if s.id == source_id:
+                source = s
+                break
+        if not source:
+            raise ApiError(
+                400,
+                f"Documentation generation requires source to be attached to this session. "
+                f"Source with ID '{source_id}' is not attached."
+            )
+    else:
+        if len(sources) == 0:
+            raise ApiError(
+                400,
+                "Documentation generation requires exactly 1 GitHub source attached to this session. "
+                "No sources are currently attached."
+            )
+        if len(sources) > 1:
+            raise ApiError(
+                400,
+                f"Documentation generation requires exactly 1 source. "
+                f"This session has {len(sources)} sources attached. "
+                "Please select a single source using the checkbox or detach all but one."
+            )
+        source = sources[0]
 
     # ── 3. Verify source is a GitHub repository ────────────────────────────
     if source.type != SourceType.github:
         raise ApiError(
             400,
             f"Documentation generation only supports GitHub repositories. "
-            f"The attached source '{source.title}' is of type '{source.type.value}'. "
-            "Please attach a GitHub repository instead."
+            f"The selected source '{source.title}' is of type '{source.type.value}'. "
+            "Please select a GitHub repository instead."
         )
 
     # ── Reuse flow: copy completed doc from another session ────────────────
@@ -285,6 +300,7 @@ async def start_doc_generation(
 async def get_doc_by_source(
     request: Request,
     session_id: UUID,
+    source_id: Optional[UUID] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -311,20 +327,42 @@ async def get_doc_by_source(
     if str(session.user_id) != str(current_user.id):
         raise ApiError(403, "You do not have permission to access this session")
 
-    # Resolve source (must be exactly 1 GitHub source)
+    # Resolve source (must be a GitHub source)
     sources = source_repo.get_sources_by_session(db, session_id)
-    if len(sources) != 1 or sources[0].type != SourceType.github:
-        return ApiResponse(
-            statusCode=200,
-            success=True,
-            data={
-                "exists": False,
-                "reason": "no_single_github_source",
-                "source_count": len(sources),
-            },
-        )
+    source = None
 
-    source = sources[0]
+    if source_id:
+        for s in sources:
+            if s.id == source_id:
+                source = s
+                break
+        if not source:
+            raise ApiError(
+                400,
+                f"Source with ID '{source_id}' is not attached to this session."
+            )
+        if source.type != SourceType.github:
+            return ApiResponse(
+                statusCode=200,
+                success=True,
+                data={
+                    "exists": False,
+                    "reason": "no_single_github_source",
+                    "source_count": len(sources),
+                },
+            )
+    else:
+        if len(sources) != 1 or sources[0].type != SourceType.github:
+            return ApiResponse(
+                statusCode=200,
+                success=True,
+                data={
+                    "exists": False,
+                    "reason": "no_single_github_source",
+                    "source_count": len(sources),
+                },
+            )
+        source = sources[0]
 
     # 1. Check this session's own copy first
     own_doc = doc_repo.get_doc_by_session_and_source(db, session_id, source.id)
