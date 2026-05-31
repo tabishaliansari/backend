@@ -40,8 +40,10 @@ class SourceStatusListener:
     def __init__(self) -> None:
         self._connection: asyncpg.Connection | None = None
         self._reconnect_task: asyncio.Task | None = None
-        # source_id (str) → set of asyncio.Queue objects held by SSE handlers
+        # source_id (str) → set of asyncio.Queue objects held by source SSE handlers
         self._subscribers: dict[str, set[asyncio.Queue]] = defaultdict(set)
+        # doc_gen_id (str) → set of asyncio.Queue objects held by doc gen SSE handlers
+        self._doc_subscribers: dict[str, set[asyncio.Queue]] = defaultdict(set)
 
     # ------------------------------------------------------------------
     # Public lifecycle API
@@ -120,6 +122,43 @@ class SourceStatusListener:
         logger.info("[SourceStatusListener] SSE subscriber removed for source %s", source_id)
 
     # ------------------------------------------------------------------
+    # Doc generation SSE subscription management
+    # ------------------------------------------------------------------
+
+    def subscribe_doc(self, doc_gen_id: str) -> asyncio.Queue:
+        """
+        Register an asyncio.Queue for a given doc_gen_id.
+
+        Called by the doc gen SSE route. Every `doc_gen_status_changed` NOTIFY
+        whose `doc_gen_id` matches will be put onto this queue.
+
+        Args:
+            doc_gen_id: String UUID of the DocumentGeneration record.
+
+        Returns:
+            asyncio.Queue that receives parsed notification dicts.
+        """
+        queue: asyncio.Queue = asyncio.Queue()
+        self._doc_subscribers[doc_gen_id].add(queue)
+        logger.info("[SourceStatusListener] Doc SSE subscriber registered for doc_gen %s", doc_gen_id)
+        return queue
+
+    def unsubscribe_doc(self, doc_gen_id: str, queue: asyncio.Queue) -> None:
+        """
+        Remove a previously registered doc gen queue.
+
+        Should always be called in a `finally` block inside the SSE generator.
+
+        Args:
+            doc_gen_id: String UUID of the DocumentGeneration record.
+            queue:      The exact Queue object returned by subscribe_doc().
+        """
+        self._doc_subscribers[doc_gen_id].discard(queue)
+        if not self._doc_subscribers[doc_gen_id]:
+            del self._doc_subscribers[doc_gen_id]
+        logger.info("[SourceStatusListener] Doc SSE subscriber removed for doc_gen %s", doc_gen_id)
+
+    # ------------------------------------------------------------------
     # Notification handler
     # ------------------------------------------------------------------
 
@@ -165,10 +204,17 @@ class SourceStatusListener:
             data,
         )
 
-        # Dispatch to all SSE queues waiting on this source_id
+        # Dispatch to source SSE queues
         queues = list(self._subscribers.get(source_id, set()))
         for q in queues:
             q.put_nowait(data)
+
+        # Dispatch to doc gen SSE queues (keyed by doc_gen_id)
+        if event == "doc_gen_status_changed":
+            doc_gen_id = str(data.get("doc_gen_id", "?"))
+            doc_queues = list(self._doc_subscribers.get(doc_gen_id, set()))
+            for q in doc_queues:
+                q.put_nowait(data)
 
     # ------------------------------------------------------------------
     # Reconnect logic (best-effort, does not block startup)

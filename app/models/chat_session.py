@@ -30,6 +30,7 @@ class ChatSession(Base):
         ForeignKey("chat_messages.id", ondelete="SET NULL", use_alter=True),
         nullable=True,
         default=None,
+        info={"context_bookmark": True}  # signals: not a traversable relationship
     )
 
     # Compaction lifecycle
@@ -54,3 +55,11 @@ class ChatSession(Base):
         secondary=chat_session_sources,
         back_populates="sessions",
     )
+
+    documents: Mapped[List["DocumentGeneration"]] = relationship(
+        "DocumentGeneration",
+        back_populates="session",
+        cascade="all, delete-orphan",
+        foreign_keys="[DocumentGeneration.session_id]",
+    )
+

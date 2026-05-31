@@ -4,7 +4,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import ForeignKey, String, Enum, JSON
 from sqlalchemy.sql import func
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 import enum
 from app.db.database import Base
 from app.models.associations import chat_session_sources
@@ -41,4 +41,11 @@ class Source(Base):
         "ChatSession",
         secondary=chat_session_sources,
         back_populates="sources",
+    )
+
+    documentations: Mapped[List["DocumentGeneration"]] = relationship(
+        "DocumentGeneration",
+        back_populates="source",
+        cascade="all, delete-orphan",
+        foreign_keys="[DocumentGeneration.source_id]",
     )
