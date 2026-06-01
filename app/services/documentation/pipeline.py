@@ -97,16 +97,18 @@ async def run_doc_generation_pipeline(doc_gen_id: str) -> None:
 
     try:
         # ──────────────────────────────────────────────────────────────────
-        # Phase 1: Mark generating, load record (5%)
+        # Phase 1: Mark generating + load record (5%)
+        # Uses a single DB session for both the status write and record read,
+        # reducing the session count from 2 to 1 for this phase.
         # ──────────────────────────────────────────────────────────────────
-        _update_db(
-            doc_gen_id,
-            status=DocumentGenerationStatus.generating,
-            progress=5,
-            started_at=datetime.now(timezone.utc),
-        )
-
         with get_db_session() as db:
+            doc_repo.update_doc_status(
+                db,
+                doc_gen_id,
+                status=DocumentGenerationStatus.generating,
+                progress=5,
+                started_at=datetime.now(timezone.utc),
+            )
             doc_gen = doc_repo.get_doc_by_id(db, doc_gen_id)
             if not doc_gen:
                 logger.error(f"[DocPipeline {doc_gen_id}] Record not found in DB")
@@ -117,7 +119,8 @@ async def run_doc_generation_pipeline(doc_gen_id: str) -> None:
             config     = dict(doc_gen.config or {})
 
         # ──────────────────────────────────────────────────────────────────
-        # Phase 2: Resolve collection_name (15%)
+        # Phase 2: Resolve collection_name + advance progress (20%)
+        # Combines the source_index read and progress update into one session.
         # ──────────────────────────────────────────────────────────────────
         with get_db_session() as db:
             source_index = source_repo.get_source_index(db, source_id)
@@ -125,15 +128,10 @@ async def run_doc_generation_pipeline(doc_gen_id: str) -> None:
                 raise RuntimeError(f"SourceIndex not found for source {source_id}")
             collection_name = source_index.collection_name
 
-        _update_db(doc_gen_id, progress=15)
+            doc_repo.update_doc_status(db, doc_gen_id, progress=20)
 
         # ──────────────────────────────────────────────────────────────────
-        # Phase 3: Start agent (20%)
-        # ──────────────────────────────────────────────────────────────────
-        _update_db(doc_gen_id, progress=20)
-
-        # ──────────────────────────────────────────────────────────────────
-        # Phase 4: Run agent with timeout (60%)
+        # Phase 3: Run agent with timeout (60%)
         # ──────────────────────────────────────────────────────────────────
         _update_db(doc_gen_id, progress=60)
 
@@ -155,7 +153,7 @@ async def run_doc_generation_pipeline(doc_gen_id: str) -> None:
             )
 
         # ──────────────────────────────────────────────────────────────────
-        # Phase 5: Validate output (85%)
+        # Phase 4: Validate output (85%)
         # ──────────────────────────────────────────────────────────────────
         _update_db(doc_gen_id, progress=85)
 
@@ -171,22 +169,16 @@ async def run_doc_generation_pipeline(doc_gen_id: str) -> None:
             markdown = markdown[:200_000] + "\n\n---\n*Documentation truncated due to length.*"
 
         # ──────────────────────────────────────────────────────────────────
-        # Phase 6: Store result (95%) — triggers NOTIFY with status=completed
+        # Phase 5: Store result + finalize (100%)
+        # Combines the previous Phase 6 (95%) and Phase 7 (100%) into a
+        # single DB write to avoid an unnecessary extra session.
         # ──────────────────────────────────────────────────────────────────
         _update_db(
             doc_gen_id,
             status=DocumentGenerationStatus.completed,
-            progress=95,
+            progress=100,
             generated_markdown=markdown,
             sections_metadata=sections_metadata,
-        )
-
-        # ──────────────────────────────────────────────────────────────────
-        # Phase 7: Final progress + timestamp (100%)
-        # ──────────────────────────────────────────────────────────────────
-        _update_db(
-            doc_gen_id,
-            progress=100,
             completed_at=datetime.now(timezone.utc),
         )
 

@@ -20,27 +20,19 @@ import docService from '@/api/docService'
 import { toast } from 'sonner'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-
-// Progress stage helper mapping percentages to descriptive textual checkpoints
-const getProgressStage = (percent) => {
-  if (percent <= 5) return 'Loading source record...'
-  if (percent <= 15) return 'Resolving vector collection & graph index...'
-  if (percent <= 20) return 'Starting documentation agent...'
-  if (percent <= 60) return 'Agent analyzing repository codebase (LLM)...'
-  if (percent <= 85) return 'Validating and formatting output...'
-  if (percent <= 95) return 'Saving structured document to database...'
-  return 'Generation complete!'
-}
+import { getProgressStage } from '@/utils/docProgress'
 
 export function DocsView({ 
   currentSession, 
   selectedSources = [], 
   onRequestRegen, 
   onDocDeleted, 
-  docRefreshTrigger 
+  docRefreshTrigger,
+  isGenerating = false,
+  generationProgress = 0,
 }) {
   // --- STATE ---
-  const [viewState, setViewState] = useState('checking') // checking, cross_session, completed, failed
+  const [viewState, setViewState] = useState('checking') // checking, generating, cross_session, completed, failed
   const [activeSource, setActiveSource] = useState(null)
   const [docGenId, setDocGenId] = useState(null)
   const [docData, setDocData] = useState(null)
@@ -65,6 +57,13 @@ export function DocsView({
       setViewState('checking')
     }
   }, [resolvedSource])
+
+  // --- SYNC GENERATING STATE FROM PARENT SSE ---
+  useEffect(() => {
+    if (isGenerating) {
+      setViewState('generating')
+    }
+  }, [isGenerating])
 
   // --- ON LOAD / SOURCE CHANGE: FETCH BY-SOURCE ---
   useEffect(() => {
@@ -214,6 +213,42 @@ export function DocsView({
         <p className="text-xs text-(--text-muted) font-mono uppercase tracking-wider">
           Querying documentation status...
         </p>
+      </div>
+    )
+  }
+
+  // --- 1b. VIEW STATE: GENERATING (LIVE SSE PROGRESS) ---
+  if (viewState === 'generating') {
+    return (
+      <div className="flex flex-col h-full items-center justify-center bg-(--bg-surface) p-6">
+        <div className="w-full max-w-sm space-y-4">
+          <div className="flex items-center gap-2">
+            <RefreshCw className="w-5 h-5 text-(--accent-cyan) animate-spin" />
+            <h3 className="text-xs font-semibold text-(--text-primary) uppercase tracking-widest font-mono">
+              Generating Documentation
+            </h3>
+          </div>
+
+          <div className="p-4 rounded border bg-(--bg-elevated)/45 border-(--border-default) space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-(--text-secondary) font-mono">
+                {activeSource?.title || 'Repository'}
+              </span>
+              <span className="text-xs text-(--accent-cyan) font-mono font-semibold">
+                {generationProgress}%
+              </span>
+            </div>
+            <div className="relative w-full h-1.5 rounded bg-(--bg-hover) overflow-hidden border border-(--border-subtle)">
+              <div
+                className="absolute left-0 top-0 h-full rounded bg-linear-to-r from-(--accent-cyan) to-emerald-500 transition-all duration-500"
+                style={{ width: `${generationProgress}%` }}
+              ></div>
+            </div>
+            <p className="text-[10px] text-(--text-muted) font-mono">
+              {getProgressStage(generationProgress)}
+            </p>
+          </div>
+        </div>
       </div>
     )
   }

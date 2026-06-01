@@ -2,8 +2,7 @@
 Pydantic schemas for the Documentation Generation feature.
 """
 
-from datetime import datetime
-from typing import Optional, List
+from typing import Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
@@ -78,56 +77,3 @@ class StartDocGenRequest(BaseModel):
             "attached to this session."
         ),
     )
-
-
-
-
-# ─────────────────────────────────────────────────────────────────────────
-# Section metadata (part of sections_metadata JSON)
-# ─────────────────────────────────────────────────────────────────────────
-
-class DocSection(BaseModel):
-    title: str
-    level: int               # 1 = h1, 2 = h2, etc.
-    char_start: int
-    char_end: int
-
-
-# ─────────────────────────────────────────────────────────────────────────
-# Response Schemas
-# ─────────────────────────────────────────────────────────────────────────
-
-class DocGenerationResponse(BaseModel):
-    id: UUID
-    session_id: UUID
-    source_id: UUID
-    user_id: UUID
-    status: str                          # Use .value from enum
-    progress_percent: int
-    generated_markdown: Optional[str]
-    sections_metadata: Optional[dict]
-    error_message: Optional[str]
-    config: dict
-    created_at: datetime
-    started_at: Optional[datetime]
-    completed_at: Optional[datetime]
-
-    # Extra fields added by route layer
-    can_regenerate: Optional[bool] = None
-
-    model_config = {"from_attributes": True}
-
-
-class DocGenerationListItem(BaseModel):
-    """Slim schema for list endpoint — no markdown body."""
-    id: UUID
-    session_id: UUID
-    source_id: UUID
-    status: str
-    progress_percent: int
-    error_message: Optional[str]
-    config: dict
-    created_at: datetime
-    completed_at: Optional[datetime]
-
-    model_config = {"from_attributes": True}

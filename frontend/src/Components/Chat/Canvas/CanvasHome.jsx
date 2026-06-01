@@ -1,6 +1,7 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { Network, FileText, ChevronRight, Info, RefreshCw } from 'lucide-react'
 import docService from '@/api/docService'
+import { getProgressStage } from '@/utils/docProgress'
 
 
 const tools = [
@@ -76,15 +77,7 @@ export function CanvasHome({
     return () => { active = false }
   }, [activeGithubSource, currentSession?.id, docRefreshTrigger])
 
-  const getProgressStage = (percent) => {
-    if (percent <= 5) return 'Loading source record...'
-    if (percent <= 15) return 'Resolving vector collection & graph index...'
-    if (percent <= 20) return 'Starting documentation agent...'
-    if (percent <= 60) return 'Agent analyzing codebase (LLM)...'
-    if (percent <= 85) return 'Validating and formatting output...'
-    if (percent <= 95) return 'Saving document to database...'
-    return 'Generation complete!'
-  }
+
 
   return (
     <div className="flex flex-col gap-3 p-4">
@@ -114,7 +107,11 @@ export function CanvasHome({
           const handleToolClick = () => {
             if (!isActive) return
             if (tool.id === 'docs') {
-              onOpenDocsConfig?.(!!existingDoc)
+              if (existingDoc) {
+                onSelectTool('docs')
+              } else {
+                onOpenDocsConfig?.(false)
+              }
             } else {
               onSelectTool(tool.id)
             }

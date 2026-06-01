@@ -37,7 +37,6 @@ class DocumentGenerationStatus(enum.Enum):
     generating = "generating"  # In progress
     completed  = "completed"   # Successfully generated
     failed     = "failed"      # Generation failed
-    cancelled  = "cancelled"   # User cancelled
 
 
 class DocumentGeneration(Base):

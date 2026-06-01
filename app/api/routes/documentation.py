@@ -26,16 +26,20 @@ SSE transport:
 """
 
 import asyncio
+import json
 from uuid import UUID
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from sqlalchemy import desc
 from starlette.responses import StreamingResponse
 
 from app.db.database import get_db
+from app.db.session import get_db_session
 from app.models.user import User
-from app.models.documentation import DocumentGenerationStatus
+from app.models.documentation import DocumentGeneration, DocumentGenerationStatus
 from app.models.source import SourceType
 from app.models.chat_session import ChatSession
 from app.api.deps import get_current_user
@@ -58,7 +62,6 @@ router = APIRouter(prefix="/sessions", tags=["documentation"])
 
 def _sse_event(event_type: str, data: dict) -> str:
     """Format a named SSE event."""
-    import json
     return f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
 
 
@@ -110,7 +113,7 @@ async def start_doc_generation(
 
     # ── 2. Verify source ───────────────────────────────────────────────────
     sources = source_repo.get_sources_by_session(db, session_id)
-    source_id = getattr(body, "source_id", None)
+    source_id = body.source_id
     source = None
 
     if source_id:
@@ -150,7 +153,7 @@ async def start_doc_generation(
         )
 
     # ── Reuse flow: copy completed doc from another session ────────────────
-    reuse_from_id = getattr(body, "reuse_from_doc_gen_id", None)
+    reuse_from_id = body.reuse_from_doc_gen_id
     if reuse_from_id:
         existing_doc = doc_repo.get_doc_by_id(db, reuse_from_id)
         if not existing_doc:
@@ -206,7 +209,7 @@ async def start_doc_generation(
         )
 
     source_id = source.id
-    force_regen = config.get("force_regenerate", False)
+    force_regen = config.pop("force_regenerate", False)
 
     # ── 5. Cache check — this session's own existing record ───────────────
     existing = doc_repo.get_doc_by_session_and_source(db, session_id, source_id)
@@ -258,13 +261,29 @@ async def start_doc_generation(
         logger.info(f"[DocRoute] Deleted stale doc record {existing.id} for force_regenerate")
 
     # ── Create new DocumentGeneration record ──────────────────────────────
-    doc_gen = doc_repo.create_doc_generation(
-        db,
-        session_id=session_id,
-        source_id=source_id,
-        user_id=current_user.id,
-        config=config,
-    )
+    try:
+        doc_gen = doc_repo.create_doc_generation(
+            db,
+            session_id=session_id,
+            source_id=source_id,
+            user_id=current_user.id,
+            config=config,
+        )
+    except IntegrityError:
+        db.rollback()
+        existing = doc_repo.get_doc_by_session_and_source(db, session_id, source_id)
+        if existing:
+            return ApiResponse(
+                statusCode=409,
+                success=False,
+                message="Documentation generation already exists for this session and source",
+                data={
+                    "id": str(existing.id),
+                    "status": existing.status.value,
+                    "sse_stream_url": f"/sessions/{session_id}/docs/{existing.id}/stream",
+                },
+            )
+        raise
     doc_gen_id = str(doc_gen.id)
 
     # Schedule background task — pipeline updates DB → PG NOTIFY → SSE
@@ -424,7 +443,6 @@ async def stream_doc_generation(
     request: Request,
     session_id: UUID,
     doc_gen_id: UUID,
-    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
@@ -442,10 +460,14 @@ async def stream_doc_generation(
     Heartbeat comments (: heartbeat) every 20s keep proxies alive.
     The stream closes automatically when status reaches completed or failed.
 
+    Auth: Cookie-based (accessToken httponly cookie). The browser sends it
+    automatically with the EventSource connection via withCredentials.
+
     Usage example (JavaScript):
-        const es = new EventSource(`/sessions/${sessionId}/docs/${docGenId}/stream`, {
-            headers: { Authorization: `Bearer ${token}` }
-        });
+        const es = new EventSource(
+            `/sessions/${sessionId}/docs/${docGenId}/stream`,
+            { withCredentials: true }
+        );
         es.addEventListener('snapshot', e => console.log(JSON.parse(e.data)));
         es.addEventListener('doc_gen_status_changed', e => {
             updateProgressBar(JSON.parse(e.data).progress_percent);
@@ -454,25 +476,32 @@ async def stream_doc_generation(
     """
     doc_gen_id_str = str(doc_gen_id)
 
-    doc_gen = doc_repo.get_doc_by_id(db, doc_gen_id)
-    if not doc_gen:
-        raise ApiError(404, "Documentation generation not found")
-    if str(doc_gen.user_id) != str(current_user.id):
-        raise ApiError(403, "You do not have permission to stream this documentation generation")
+    # Use a short-lived DB session for the initial read only.
+    # This avoids holding a connection from the pool for the entire
+    # duration of the SSE stream (which can last 30-180s).
+    with get_db_session() as db:
+        doc_gen = doc_repo.get_doc_by_id(db, doc_gen_id)
+        if not doc_gen:
+            raise ApiError(404, "Documentation generation not found")
+        if str(doc_gen.session_id) != str(session_id):
+            raise ApiError(404, "Documentation generation not found in this session")
+        if str(doc_gen.user_id) != str(current_user.id):
+            raise ApiError(403, "You do not have permission to stream this documentation generation")
 
-    # Build snapshot of current DB state (emitted immediately on connect)
-    initial_snapshot = {
-        "doc_gen_id":       str(doc_gen.id),
-        "session_id":       str(doc_gen.session_id),
-        "source_id":        str(doc_gen.source_id),
-        "status":           doc_gen.status.value,
-        "progress_percent": doc_gen.progress_percent,
-        "error_message":    doc_gen.error_message,
-    }
-    already_terminal = doc_gen.status in (
-        DocumentGenerationStatus.completed,
-        DocumentGenerationStatus.failed,
-    )
+        # Build snapshot of current DB state (emitted immediately on connect)
+        initial_snapshot = {
+            "doc_gen_id":       str(doc_gen.id),
+            "session_id":       str(doc_gen.session_id),
+            "source_id":        str(doc_gen.source_id),
+            "status":           doc_gen.status.value,
+            "progress_percent": doc_gen.progress_percent,
+            "error_message":    doc_gen.error_message,
+        }
+        already_terminal = doc_gen.status in (
+            DocumentGenerationStatus.completed,
+            DocumentGenerationStatus.failed,
+        )
+    # DB session is released here — before any streaming begins
 
     async def event_generator():
         # 1. Emit current DB state immediately (mirrors source SSE route pattern)
@@ -481,7 +510,7 @@ async def stream_doc_generation(
         # 2. If already terminal, emit complete and close
         if already_terminal:
             yield _sse_event("complete", {
-                "status": doc_gen.status.value,
+                "status": initial_snapshot["status"],
                 "message": "Documentation generation already in terminal state.",
             })
             return
@@ -546,6 +575,8 @@ async def get_doc_generation_status(
     doc_gen = doc_repo.get_doc_by_id(db, doc_gen_id)
     if not doc_gen:
         raise ApiError(404, "Documentation generation not found")
+    if str(doc_gen.session_id) != str(session_id):
+        raise ApiError(404, "Documentation generation not found in this session")
     if str(doc_gen.user_id) != str(current_user.id):
         raise ApiError(403, "You do not have permission to view this documentation generation")
 
@@ -609,6 +640,8 @@ async def delete_doc_generation(
     doc_gen = doc_repo.get_doc_by_id(db, doc_gen_id)
     if not doc_gen:
         raise ApiError(404, "Documentation generation not found")
+    if str(doc_gen.session_id) != str(session_id):
+        raise ApiError(404, "Documentation generation not found in this session")
     if str(doc_gen.user_id) != str(current_user.id):
         raise ApiError(403, "You do not have permission to delete this documentation generation")
 
@@ -642,9 +675,6 @@ def _get_sessions_with_doc_for_source(
 
     Used by by-source to populate the 'Reuse — choose from these sessions' list.
     """
-    from app.models.documentation import DocumentGeneration
-    from sqlalchemy import desc
-
     docs = (
         db.query(DocumentGeneration)
         .join(ChatSession, ChatSession.id == DocumentGeneration.session_id)

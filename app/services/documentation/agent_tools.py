@@ -15,7 +15,7 @@ Client singletons (_qdrant, _embeddings, _neo4j) are imported from the existing
 tools.py module to avoid duplicate instantiation.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 from agents import RunContextWrapper, function_tool
@@ -39,6 +39,17 @@ class DocumentationAgentContext:
     user_id: str          # For logging / audit
     doc_gen_id: str       # For pipeline progress tracking
     config: dict          # Generation config: style, detail_level, model, etc.
+    _vector_store_cache: dict = field(default_factory=dict, repr=False)
+
+    def get_vector_store(self) -> QdrantVectorStore:
+        """Return a cached QdrantVectorStore for this context's collection."""
+        if self.collection_name not in self._vector_store_cache:
+            self._vector_store_cache[self.collection_name] = QdrantVectorStore(
+                client=_qdrant,
+                collection_name=self.collection_name,
+                embedding=_embeddings,
+            )
+        return self._vector_store_cache[self.collection_name]
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -226,11 +237,7 @@ async def get_code_examples(
     max_examples = min(max_examples, 5)
 
     try:
-        vector_store = QdrantVectorStore(
-            client=_qdrant,
-            collection_name=ctx.collection_name,
-            embedding=_embeddings,
-        )
+        vector_store = ctx.get_vector_store()
         docs = vector_store.similarity_search(
             f"code example for {topic}",
             k=max_examples,
@@ -278,11 +285,7 @@ async def doc_vector_search(
     top_k = min(top_k, 8)
 
     try:
-        vector_store = QdrantVectorStore(
-            client=_qdrant,
-            collection_name=ctx.collection_name,
-            embedding=_embeddings,
-        )
+        vector_store = ctx.get_vector_store()
         docs = vector_store.similarity_search(query, k=top_k)
 
         if not docs:

@@ -135,6 +135,8 @@ function Chat() {
     es.onerror = (err) => {
       console.error('SSE connection error:', err)
       cleanupSSE()
+      setIsGenerating(false)
+      setGenerationStatus('failed')
     }
   }
 

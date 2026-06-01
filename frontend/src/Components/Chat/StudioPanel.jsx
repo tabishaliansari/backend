@@ -119,6 +119,8 @@ function CanvasPanel({
             onRequestRegen={() => onOpenDocsConfig?.(true)}
             onDocDeleted={onDocDeleted}
             docRefreshTrigger={docRefreshTrigger}
+            isGenerating={isGenerating}
+            generationProgress={generationProgress}
           />
         )}
       </div>

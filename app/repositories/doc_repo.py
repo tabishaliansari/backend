@@ -205,47 +205,61 @@ def update_doc_status(
     """
     Partial update for a DocumentGeneration record.
     Only updates fields that are explicitly passed (not None).
+    Uses a single UPDATE statement without a prior SELECT.
 
     Returns:
         Updated DocumentGeneration, or None if not found.
     """
-    doc_gen = db.query(DocumentGeneration).filter(DocumentGeneration.id == doc_gen_id).first()
-    if not doc_gen:
+    updates = {}
+    if status is not None:
+        updates["status"] = status
+    if progress is not None:
+        updates["progress_percent"] = progress
+    if started_at is not None:
+        updates["started_at"] = started_at
+    if completed_at is not None:
+        updates["completed_at"] = completed_at
+    if generated_markdown is not None:
+        updates["generated_markdown"] = generated_markdown
+    if sections_metadata is not None:
+        updates["sections_metadata"] = sections_metadata
+    if error_message is not None:
+        updates["error_message"] = str(error_message)[:500]
+
+    if not updates:
+        return get_doc_by_id(db, doc_gen_id)
+
+    rows_updated = (
+        db.query(DocumentGeneration)
+        .filter(DocumentGeneration.id == doc_gen_id)
+        .update(updates, synchronize_session="fetch")
+    )
+    db.commit()
+
+    if rows_updated == 0:
         logger.warning(f"[DocRepo] update_doc_status: record {doc_gen_id} not found")
         return None
 
-    if status is not None:
-        doc_gen.status = status
-    if progress is not None:
-        doc_gen.progress_percent = progress
-    if started_at is not None:
-        doc_gen.started_at = started_at
-    if completed_at is not None:
-        doc_gen.completed_at = completed_at
-    if generated_markdown is not None:
-        doc_gen.generated_markdown = generated_markdown
-    if sections_metadata is not None:
-        doc_gen.sections_metadata = sections_metadata
-    if error_message is not None:
-        doc_gen.error_message = str(error_message)[:500]
-
-    db.commit()
-    db.refresh(doc_gen)
-    return doc_gen
+    return get_doc_by_id(db, doc_gen_id)
 
 
 def delete_doc_generation(db: Session, doc_gen_id: UUID) -> bool:
     """
     Delete a DocumentGeneration record.
+    Uses a single DELETE statement without a prior SELECT.
 
     Returns:
         True if deleted, False if not found.
     """
-    doc_gen = db.query(DocumentGeneration).filter(DocumentGeneration.id == doc_gen_id).first()
-    if not doc_gen:
+    rows_deleted = (
+        db.query(DocumentGeneration)
+        .filter(DocumentGeneration.id == doc_gen_id)
+        .delete(synchronize_session="fetch")
+    )
+    db.commit()
+
+    if rows_deleted == 0:
         return False
 
-    db.delete(doc_gen)
-    db.commit()
     logger.info(f"[DocRepo] Deleted DocumentGeneration {doc_gen_id}")
     return True
