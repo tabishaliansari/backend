@@ -106,21 +106,23 @@ export function GraphView({ currentSession, graphData, syncMode, onSetSyncMode, 
     }
   }, [graphData])
 
-  // Re-fetch full graph when selected sources change (explore mode only)
+  // Re-fetch full graph when selected sources change or mode changes (explore mode only)
   useEffect(() => {
     if (!currentSession || syncMode) return
     handleLoadFullGraph()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedSources])
+  }, [currentSession?.id, selectedSources, syncMode])
 
   const handleLoadFullGraph = async () => {
     if (!currentSession) return
     setIsLoading(true)
     setErrorMsg('')
     try {
-      const res = await chatSessionService.getFullGraph(currentSession.id)
+      // Extract source IDs from selectedSources
+      const sourceIds = selectedSources.map(s => s.id || s);
+      const res = await chatSessionService.getFullGraph(currentSession.id, sourceIds)
       const raw = res.data
-      // Filter to selected sources on the frontend
+      // Backend now handles source filtering, but keep as safety check
       const data = filterToSelection(raw)
       if (!data?.nodes?.length) {
         setIsEmpty(true)
