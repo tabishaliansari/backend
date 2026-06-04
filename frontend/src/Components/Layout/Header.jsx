@@ -14,6 +14,7 @@ import { toast } from 'sonner'
 import useAuthStore from '@/store/authStore'
 import { useThemeStore } from '@/store'
 import AvatarUploadModal from '../Common/Modals/AvatarUploadModal'
+import SettingsModal from '../Common/Modals/SettingsModal'
 import GraphLMLogo from '../Common/GraphLMLogo'
 
 const getDisplayName = (user) => user?.firstName || user?.username || 'User'
@@ -71,6 +72,7 @@ function AppHeader() {
   }
 
   const [avatarModalOpen, setAvatarModalOpen] = useState(false)
+  const [settingsModalOpen, setSettingsModalOpen] = useState(false)
 
   const handleManageAccount = () => {
     setAvatarModalOpen(true)
@@ -78,7 +80,7 @@ function AppHeader() {
   }
 
   const handleSettings = () => {
-    toast.info('Settings coming soon')
+    setSettingsModalOpen(true)
     setUserMenuOpen(false)
   }
 
@@ -125,6 +127,7 @@ function AppHeader() {
               {/* Settings */}
               <button
                 onClick={handleSettings}
+                onMouseEnter={() => setThemeSubmenuOpen(false)}
                 className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-(--text-secondary) transition-colors hover:bg-(--bg-hover) hover:text-(--text-primary)"
               >
                 <Settings className="w-4 h-4" />
@@ -134,6 +137,7 @@ function AppHeader() {
               {/* Profile */}
               <button
                 onClick={handleManageAccount}
+                onMouseEnter={() => setThemeSubmenuOpen(false)}
                 className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-(--text-secondary) transition-colors hover:bg-(--bg-hover) hover:text-(--text-primary)"
               >
                 <UserIcon className="w-4 h-4" />
@@ -144,7 +148,6 @@ function AppHeader() {
               <div className="relative group">
                 <button
                   className="w-full flex items-center justify-between px-4 py-2.5 text-sm text-(--text-secondary) transition-colors hover:bg-(--bg-hover) hover:text-(--text-primary)"
-                  onMouseEnter={() => setThemeSubmenuOpen(true)}
                   onClick={() => setThemeSubmenuOpen(!themeSubmenuOpen)}
                 >
                   <div className="flex items-center gap-3">
@@ -185,6 +188,7 @@ function AppHeader() {
               {/* Logout */}
               <button
                 onClick={handleLogout}
+                onMouseEnter={() => setThemeSubmenuOpen(false)}
                 className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-(--accent-red) transition-colors hover:bg-(--accent-red-dim)"
               >
                 <LogOut className="w-4 h-4" />
@@ -200,6 +204,10 @@ function AppHeader() {
         onClose={() => setAvatarModalOpen(false)}
         avatarUrl={avatarUrl}
         displayName={displayName}
+      />
+      <SettingsModal
+        open={settingsModalOpen}
+        onClose={() => setSettingsModalOpen(false)}
       />
     </header>
   )
