@@ -614,18 +614,21 @@ async def graph_query(
 async def get_full_graph(
     request: Request,
     session_id: UUID,
+    source_ids: Optional[str] = Query(None, description="Comma-separated source IDs to filter by"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
     Get the full knowledge graph for a session.
     
-    Returns all entities and relationships from sources attached to this session.
-    Results are capped at 500 nodes; if exceeded, truncated flag is set.
+    Returns entities and relationships from sources attached to this session.
+    If source_ids is provided, filters to only those sources; otherwise uses all attached sources.
+    Results are capped at ~150 nodes per source; if any source hits the limit, truncated flag is set.
     Used by KG viewer "show full graph" button.
     
     Args:
         session_id: Session ID
+        source_ids: Optional comma-separated source UUIDs to filter by
         db: Database session
         current_user: Authenticated user
     
@@ -635,7 +638,7 @@ async def get_full_graph(
     Raises:
         ApiError(404): If session not found
         ApiError(403): If session doesn't belong to user
-        ApiError(400): If session has no attached sources
+        ApiError(400): If session has no attached sources or invalid source_ids
     """
     session = session_repo.get_session_by_id(db, session_id)
     if not session:
@@ -650,37 +653,76 @@ async def get_full_graph(
             "Cannot retrieve graph. Session has no attached sources."
         )
     
-    source_ids = [str(source.id) for source in session.sources]
+    # Parse source_ids parameter: if provided, validate against session sources
+    session_source_ids = {str(source.id) for source in session.sources}
+    
+    if source_ids:
+        # Parse comma-separated source IDs and validate
+        try:
+            target_source_ids = [s.strip() for s in source_ids.split(",") if s.strip()]
+            if not target_source_ids:
+                raise ValueError("Empty source_ids list")
+            
+            # Validate: all requested source_ids belong to this session
+            invalid_ids = set(target_source_ids) - session_source_ids
+            if invalid_ids:
+                raise ApiError(
+                    400,
+                    f"Invalid source_ids: {invalid_ids}. Not attached to this session.",
+                    code="INVALID_SOURCE_IDS"
+                )
+        except ValueError as e:
+            if isinstance(e, ApiError):
+                raise
+            raise ApiError(400, f"Invalid source_ids format: {str(e)}", code="INVALID_SOURCE_IDS_FORMAT")
+    else:
+        # Default: use all sources attached to the session
+        target_source_ids = list(session_source_ids)
 
     try:
         driver = get_neo4j_driver()
 
-        # Parameterized Cypher — scoped to session sources, no string interpolation
+        # Per-source Cypher query using UNWIND + CALL subqueries
+        # Each source gets its own LIMIT to prevent starvation
         cypher = """
-        MATCH (n)-[r]->(m)
-        WHERE n.source_id IN $source_ids
-          AND m.source_id IN $source_ids
+        UNWIND $target_source_ids AS target_sid
+        CALL {
+          WITH target_sid
+          MATCH (n)-[r]->(m)
+          WHERE n.source_id = target_sid AND m.source_id = target_sid
+          RETURN n, r, m
+          LIMIT 150
+        }
         RETURN n, r, m
-        LIMIT 501
         """
 
         async with driver.session() as neo_session:
-            result = await neo_session.run(cypher, source_ids=source_ids)
-            records = await result.fetch(501)
+            result = await neo_session.run(cypher, target_source_ids=target_source_ids)
+            records = await result.fetch(1000)  # Fetch more to detect truncation per source
 
         nodes_dict: dict = {}
         edges: list = []
         edges_set: set = set()
+        
+        # Per-source tracking for truncation detection
+        per_source_counts: dict = {}
+        for source_id in target_source_ids:
+            per_source_counts[source_id] = 0
 
-        for record in records[:500]:
+        for record in records:
             for value in record.values():
                 if hasattr(value, "element_id") and hasattr(value, "labels"):
                     node_id = value.element_id
                     if node_id not in nodes_dict:
+                        props = dict(value)
+                        source_id = props.get("source_id")
+                        if source_id and source_id in per_source_counts:
+                            per_source_counts[source_id] += 1
+                        
                         nodes_dict[node_id] = {
                             "id": node_id,
                             "label": next(iter(value.labels), "Unknown"),
-                            "properties": dict(value),
+                            "properties": props,
                         }
                 if hasattr(value, "start_node") and hasattr(value, "end_node"):
                     src = value.start_node.element_id
@@ -696,9 +738,12 @@ async def get_full_graph(
                         edges_set.add(key)
 
         nodes = list(nodes_dict.values())
-        truncated = len(records) > 500
+        
+        # Detect if any source hit the per-source limit (150 nodes)
+        truncated = any(count >= 150 for count in per_source_counts.values()) if per_source_counts else False
 
-        if truncated:
+        # Ensure edges only reference existing nodes
+        if truncated or not nodes:
             node_ids = {n["id"] for n in nodes}
             edges = [e for e in edges if e["source"] in node_ids and e["target"] in node_ids]
 
@@ -712,6 +757,7 @@ async def get_full_graph(
 
         logger.info(
             f"[FullGraph] session={session_id} | "
+            f"source_ids={target_source_ids} | "
             f"nodes={len(nodes)}, edges={len(edges)}, truncated={truncated}"
         )
 

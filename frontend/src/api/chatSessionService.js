@@ -50,8 +50,12 @@ const chatSessionService = {
   },
 
   // Get the full graph attached to the session
-  getFullGraph: async (sessionId) => {
-    const response = await axiosInstance.get(`/sessions/${sessionId}/graph`);
+  getFullGraph: async (sessionId, sourceIds) => {
+    const params = {};
+    if (sourceIds && sourceIds.length > 0) {
+      params.source_ids = sourceIds.join(',');
+    }
+    const response = await axiosInstance.get(`/sessions/${sessionId}/graph`, { params });
     return response.data;
   },
 
