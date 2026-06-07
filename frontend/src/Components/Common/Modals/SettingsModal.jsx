@@ -39,6 +39,7 @@ export default function SettingsModal({ open, onClose }) {
   const [tabSearch, setTabSearch] = useState('')
   const [sourceSearch, setSourceSearch] = useState('')
   const [sessionSearch, setSessionSearch] = useState('')
+  const [pendingDelete, setPendingDelete] = useState(null)
 
   // Profile Form State
   const [fullname, setFullname] = useState('')
@@ -150,22 +151,19 @@ export default function SettingsModal({ open, onClose }) {
   }
 
   const handleDeleteSource = async (sourceId) => {
-    if (window.confirm('Are you sure you want to delete this source? This will permanently wipe its vector and graph indexes.')) {
-      try {
-        await deleteSource(sourceId)
-      } catch (err) {
-        console.error(err)
-      }
+    console.log("handleDeleteSource called with sourceId:", sourceId)
+    try {
+      await deleteSource(sourceId)
+    } catch (err) {
+      console.error(err)
     }
   }
 
   const handleDeleteSession = async (sessionId) => {
-    if (window.confirm('Are you sure you want to delete this chat session? This will clear its database records and vector memory.')) {
-      try {
-        await deleteSession(sessionId)
-      } catch (err) {
-        console.error(err)
-      }
+    try {
+      await deleteSession(sessionId)
+    } catch (err) {
+      console.error(err)
     }
   }
 
@@ -215,7 +213,7 @@ export default function SettingsModal({ open, onClose }) {
 
   return (
     <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/75 backdrop-blur-sm px-4">
-      <div className="w-full max-w-3xl h-[520px] rounded-lg border border-(--border-strong) bg-(--bg-elevated) flex overflow-hidden shadow-2xl animate-fade-in">
+      <div className="w-full max-w-3xl h-[520px] rounded-lg border border-(--border-strong) bg-(--bg-elevated) flex relative overflow-hidden shadow-2xl animate-fade-in">
 
         {/* Left Sidebar Column */}
         <div className="w-52 shrink-0 border-r border-(--border-subtle) bg-(--bg-surface) flex flex-col p-4">
@@ -243,7 +241,12 @@ export default function SettingsModal({ open, onClose }) {
               return (
                 <button
                   key={t.id}
-                  onClick={() => setActiveTab(t.id)}
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    setActiveTab(t.id)
+                  }}
                   className={`w-full flex items-center gap-3 px-3 py-2 text-xs font-mono rounded transition-colors text-left ${isActive
                     ? 'bg-(--accent-cyan-dim) text-(--accent-cyan) font-medium'
                     : 'text-(--text-secondary) hover:text-(--text-primary) hover:bg-(--bg-hover)'
@@ -269,7 +272,12 @@ export default function SettingsModal({ open, onClose }) {
               {activeTab.replace(/([A-Z])/g, ' $1')}
             </h3>
             <button
-              onClick={onClose}
+              type="button"
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                onClose()
+              }}
               className="p-1 rounded text-(--text-muted) hover:text-(--text-primary) hover:bg-(--bg-hover) transition-colors text-sm"
               aria-label="Close settings"
             >
@@ -361,7 +369,12 @@ export default function SettingsModal({ open, onClose }) {
                         return (
                           <button
                             key={tOption.value}
-                            onClick={() => setTheme(tOption.value)}
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              setTheme(tOption.value)
+                            }}
                             className={`flex items-center justify-center gap-2 py-2 border rounded text-xs font-mono transition-all cursor-pointer ${isSelected
                               ? 'bg-(--accent-cyan-dim) border-(--accent-cyan) text-(--accent-cyan)'
                               : 'bg-(--bg-elevated) border-(--border-subtle) text-(--text-secondary) hover:border-(--border-strong)'
@@ -430,7 +443,17 @@ export default function SettingsModal({ open, onClose }) {
                               {source.status}
                             </span>
                             <button
-                              onClick={() => handleDeleteSource(source.id)}
+                              type="button"
+                              onClick={(e) => {
+                                console.log("Delete button clicked in DOM for source:", source.id)
+                                e.preventDefault()
+                                e.stopPropagation()
+                                setPendingDelete({
+                                  type: 'source',
+                                  id: source.id,
+                                  title: source.title
+                                })
+                              }}
                               className="p-1 rounded text-(--accent-red) hover:bg-(--accent-red-dim) transition-colors"
                               title="Delete source and clean up indexes"
                             >
@@ -480,7 +503,16 @@ export default function SettingsModal({ open, onClose }) {
                         </div>
 
                         <button
-                          onClick={() => handleDeleteSession(session.id)}
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            setPendingDelete({
+                              type: 'session',
+                              id: session.id,
+                              title: session.title
+                            })
+                          }}
                           className="p-1.5 rounded text-(--accent-red) hover:bg-(--accent-red-dim) transition-colors shrink-0"
                           title="Delete chat session and vector history"
                         >
@@ -621,6 +653,51 @@ export default function SettingsModal({ open, onClose }) {
                     >
                       <LogOut className="w-4 h-4" />
                       <span>Log Out Account</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+            {pendingDelete && (
+              <div className="absolute inset-0 z-70 flex items-center justify-center bg-black/60 backdrop-blur-md animate-fade-in p-6">
+                <div className="w-full max-w-sm rounded-lg border border-(--border-strong) bg-(--bg-elevated) p-6 shadow-2xl space-y-4 font-mono">
+                  <h3 className="text-xs font-bold text-(--text-primary) uppercase tracking-wider">
+                    Confirm Deletion
+                  </h3>
+                  <p className="text-xs text-(--text-secondary) leading-relaxed">
+                    Are you sure you want to delete the {pendingDelete.type} <span className="text-(--accent-cyan) font-bold">"{pendingDelete.title}"</span>? 
+                    {pendingDelete.type === 'source' 
+                      ? ' This will permanently wipe its vector and graph indexes.'
+                      : ' This will clear its database records and vector memory.'}
+                  </p>
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        setPendingDelete(null)
+                      }}
+                      className="flex-1 border border-(--border-strong) py-2 rounded text-xs font-semibold hover:bg-(--bg-hover) text-(--text-primary) transition-colors cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async (e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        const { type, id } = pendingDelete
+                        setPendingDelete(null)
+                        if (type === 'source') {
+                          await handleDeleteSource(id)
+                        } else {
+                          await handleDeleteSession(id)
+                        }
+                      }}
+                      className="flex-1 bg-(--accent-red-dim) border border-(--accent-red) py-2 rounded text-xs font-semibold hover:bg-(--accent-red) hover:text-(--bg-base) text-(--accent-red) transition-colors cursor-pointer"
+                    >
+                      Delete
                     </button>
                   </div>
                 </div>
